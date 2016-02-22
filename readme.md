@@ -12,4 +12,4 @@ with the following clarifications:
 * `.` matches any character including newline.
 * `^` matches only the beginning of a string (not the character after newline)
 * `$` matches only the end of a string (not a newline)
-* a negated character class does not matches newline (as specified in regexp(6))
+* a negated character class does not match newline (as specified in regexp(6))
