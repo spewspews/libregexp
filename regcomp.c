@@ -1,74 +1,23 @@
 #include <u.h>
 #include <libc.h>
 #include "regex.h"
-
-enum
-{
-	LRUNE = 0,
-	LEND,
-	LREP,
-	LOR,
-	LANY,
-	LLPAR,
-	LRPAR,
-	LBOL,
-	LEOL,
-	LCLASS,
-	TCAT = 0,
-	TOR,
-	TSTAR,
-	TPLUS,
-	TQUES,
-	TANY,
-	TBOL,
-	TEOL,
-	TSUB,
-	TCLASS,
-	TRUNE,
-	ORUNE = 0,
-	OCLASS,
-};
-
-typedef struct Parselex Parselex;
-typedef struct Renode Renode;
-
-struct Parselex
-{
-	/* Parse */
-	Renode *freep;
-	Renode *nodes;
-	/* Lex */
-	char *rawexp;
-	Rune yyrune;
-	Rune yypeek;
-	int peek;
-	int done;
-	int literal;
-	Rune cpairs[200+2];
-	int cn;
-};
-struct Renode
-{
-	int op;
-	union
-	{
-		Rune r;
-		Renode *left;
-	};
-	union
-	{
-		Rune r1;
-		Renode *right;
-	};
-};
+#include "regcomp.h"
 
 static int yylex(Parselex*);
+static void getnextr(Parselex*);
+static void getclass(Parselex*);
 static Renode *e0(Parselex*);
+static Renode *e1(Parselex*);
+static Renode *e2(Parselex*);
+static Renode *e3(Parselex*);
+static Renode *buildclass(Parselex*);
+static Renode *buildclassn(Parselex*);
+static int pcmp(void*, void*);
+static Reinst *compile(Renode*, Reprog*);
+static Reinst *compile1(Renode*, Reinst*, int*);
 static void prtree(Renode*, int, int);
 static void prprog(Reprog*);
-static Renode *buildclass(Parselex*);
-static Reinst *compile(Renode*, Reprog*);
-void getclass(Parselex*);
+//static void prinst(Reinst*);
 
 static Renode*
 node(Parselex *plex, int op, Renode *l, Renode *r)
@@ -80,13 +29,6 @@ node(Parselex *plex, int op, Renode *l, Renode *r)
 	n->left = l;
 	n->right = r;
 	return n;
-}
-
-void
-regerror(char *s)
-{
-	fprint(2, "error: %s\n", s);
-	exits(0);
 }
 
 static Renode*
@@ -107,6 +49,8 @@ e3(Parselex *plex)
 		n->r = plex->yyrune;
 		return n;
 	case LCLASS:
+		if(plex->nc)
+			return buildclassn(plex);
 		return buildclass(plex);
 	case LLPAR:
 		n = e0(plex);
@@ -186,15 +130,15 @@ regcomp(char *regstr)
 	int regstrlen;
 
 	regstrlen = utflen(regstr);
-	reprog = malloc(sizeof(*reprog) + sizeof(Reinst)*regstrlen*2);
-	plex.nodes = calloc(sizeof(*plex.nodes), regstrlen*2 + 2);
+	reprog = malloc(sizeof(*reprog) + sizeof(Reinst)*(regstrlen*2 + 5));
+	plex.nodes = calloc(sizeof(*plex.nodes), regstrlen*2 + 10);
 	if(reprog == nil || plex.nodes == nil)
 		return nil;
 	plex.freep = plex.nodes;
 	plex.rawexp = regstr;
-	parsetr = e0(&plex);
-//	parsetr = node(&plex, TCAT, node(&plex, TSTAR, node(&plex, TANY, nil, nil), nil), parsetr);
-	prtree(parsetr, 0, 0);
+	plex.sub = 0;
+	parsetr = node(&plex, TSUB, e0(&plex), nil);
+//	prtree(parsetr, 0, 0);
 	reprog->startinst = compile(parsetr, reprog);
 	free(plex.nodes);
 	prprog(reprog);
@@ -202,8 +146,11 @@ regcomp(char *regstr)
 }
 
 static Reinst*
-compile1(Renode *renode, Reinst *reinst)
+compile1(Renode *renode, Reinst *reinst, int *sub)
 {
+	Reinst *i;
+	int s;
+
 	switch(renode->op) {
 	case TRUNE:
 		reinst->op = ORUNE;
@@ -215,8 +162,55 @@ compile1(Renode *renode, Reinst *reinst)
 		reinst->r1 = renode->r1;
 		return ++reinst;
 	case TCAT:
-		reinst = compile1(renode->left, reinst);
-		return compile1(renode->right, reinst);
+		reinst = compile1(renode->left, reinst, sub);
+		return compile1(renode->right, reinst, sub);
+	case TOR:
+		reinst->op = OSPLIT;
+		reinst->a = reinst + 1;
+		i = compile1(renode->left, reinst->a, sub);
+		reinst->b = i + 1;
+		i->op = OJMP;
+		i->a = compile1(renode->right, reinst->b, sub);
+		return i->a;
+	case TSTAR:
+		reinst->op = OSPLIT;
+		reinst->a = reinst + 1;
+		i = compile1(renode->left, reinst->a, sub);
+		reinst->b = i + 1;
+		i->op = OJMP;
+		i->a = reinst;
+		return reinst->b;
+	case TPLUS:
+		i = reinst;
+		reinst = compile1(renode->left, reinst, sub);
+		reinst->op = OSPLIT;
+		reinst->a = i;
+		reinst->b = reinst + 1;
+		return reinst->b;
+	case TQUES:
+		reinst->op = OSPLIT;
+		reinst->a = reinst + 1;
+		reinst->b = compile1(renode->left, reinst->a, sub);
+		return reinst->b;
+	case TSUB:
+		reinst->op = OSAVE;
+		reinst->sub = s = (*sub)++;
+		reinst = compile1(renode->left, reinst+1, sub);
+		reinst->op = OUNSAVE;
+		reinst->sub = s;
+		return reinst+1;
+	case TANY:
+		reinst->op = OANY;
+		return ++reinst;
+	case TNOTNL:
+		reinst->op = ONOTNL;
+		return ++reinst;
+	case TEOL:
+		reinst->op = OEOL;
+		return ++reinst;
+	case TBOL:
+		reinst->op = OBOL;
+		return ++reinst;
 	}
 	return nil;
 }
@@ -225,9 +219,10 @@ static Reinst*
 compile(Renode *parsetr, Reprog *reprog)
 {
 	Reinst *reinst, *end;
+	int sub;
 
 	reinst = (Reinst*)(reprog+1);
-	end = compile1(parsetr, reinst);
+	end = compile1(parsetr, reinst, &sub);
 	reprog->len = end - reinst;
 	return reinst;
 }
@@ -288,7 +283,7 @@ yylex(Parselex *l)
 	return l->peek = LRUNE;
 }
 
-int
+static int
 pcmp(void *va, void *vb)
 {
 	vlong n;
@@ -303,14 +298,15 @@ pcmp(void *va, void *vb)
 	return (vlong)a[1] - (vlong)b[1];
 }
 
-void
+static void
 getclass(Parselex *l)
 {
 	Rune *p, *q, t;
 
+	l->nc = 0;
 	getnextr(l);
 	if(l->yyrune == L'^') {
-		l->cn = 1;
+		l->nc = 1;
 		getnextr(l);
 	}
 	p = l->cpairs;
@@ -361,29 +357,58 @@ getclass(Parselex *l)
 }
 
 static Renode*
+buildclassn(Parselex *l)
+{
+	/* TODO handle newline */
+	Renode *n, *n1;
+	Rune *p;
+
+	p = l->cpairs;
+	n = node(l, TCLASS, nil, nil);
+	n->r = 0;
+	n->r1 = p[0] - 1;
+
+	for(p += 2; *p != 0; p += 2) {
+		n1 = node(l, TCLASS, nil, nil);
+		n1->r = p[-1] + 1;
+		n1->r1 = p[0] - 1;
+		n = node(l, TOR, n, n1);
+	}
+	n1 = node(l, TCLASS, nil, nil);
+	n1->r = p[-1] + 1;
+	n1->r1 = Runemax;
+	n = node(l, TOR, n, n1);
+
+	n1 = node(l, TNOTNL, nil, nil);
+	n1->r = L'\n';
+	n = node(l, TCAT, n1, n);
+	return n;
+}
+
+static Renode*
 buildclass(Parselex *l)
 {
 	Renode *n, *n1;
 	Rune *p;
 
 	p = l->cpairs;
-	if(p[0] == p[1]) {
-		n = node(l, TRUNE, nil, nil);
-		n->r = p[0];
-	} else {
+	if(p[0] != p[1]) {
 		n = node(l, TCLASS, nil, nil);
 		n->r = p[0];
 		n->r1 = p[1];
+	} else {
+		n = node(l, TRUNE, nil, nil);
+		n->r = p[0];
 	}
-	for(p += 2; *p != 0; p+=2) {
-		if(p[0] == p[1]) {
-			n1 = node(l, TRUNE, nil, nil);
-			n1->r = p[0];
-			n = node(l, TOR, n, n1);
-		} else {
+	for(p += 2; *p != 0; p += 2) {
+		if(p[0] != p[1]) {
 			n1 = node(l, TCLASS, nil, nil);
 			n1->r = p[0];
 			n1->r1 = p[1];
+			n = node(l, TOR, n, n1);
+		} else {
+			n1 = node(l, TRUNE, nil, nil);
+			n1->r = p[0];
 			n = node(l, TOR, n, n1);
 		}
 	}
@@ -408,6 +433,9 @@ prtree(Renode *tree, int d, int f)
 	case TOR:
 		print("TOR\n");
 		prtree(tree->left, d+1, 1);
+		for(i = 0; i < d; i++)
+			print("\t");
+		print("|\n");
 		prtree(tree->right, d+1, 1);
 		break;
 	case TSTAR:
@@ -439,6 +467,9 @@ prtree(Renode *tree, int d, int f)
 	case TRUNE:
 		print("RUNE: %C\n", tree->r);
 		break;
+	case TNOTNL:
+		print("NOTNL: \\n\n");
+		break;
 	case TCLASS:
 		print("CLASS: %C-%C\n", tree->r, tree->r1);
 		break;
@@ -451,14 +482,44 @@ prprog(Reprog *reprog)
 	Reinst *inst;
 
 	print("Printing prog of len %d\n", reprog->len);
-	for(inst = reprog->startinst; inst < reprog->startinst + reprog->len; inst++) {
-		switch(inst->op) {
-		case ORUNE:
-			print("ORUNE\t%C\n", inst->r);
-			break;
-		case OCLASS:
-			print("OCLASS\t%C-%C\n", inst->r, inst->r1);
-			break;
-		}
+	for(inst = reprog->startinst; inst < reprog->startinst + reprog->len; inst++)
+		prinst(inst);
+}
+
+void
+prinst(Reinst *inst)
+{
+	print("%p ", inst);
+	switch(inst->op) {
+	case ORUNE:
+		print("ORUNE\t%C\n", inst->r);
+		break;
+	case ONOTNL:
+		print("ONOTNL\n");
+		break;
+	case OCLASS:
+		print("OCLASS\t%C-%C\n", inst->r, inst->r1);
+		break;
+	case OSPLIT:
+		print("OSPLIT\t%p %p\n", inst->a, inst->b);
+		break;
+	case OJMP:
+		print("OJMP \t%p\n", inst->a);
+		break;
+	case OSAVE:
+		print("OSAVE\t%d\n", inst->sub);
+		break;
+	case OUNSAVE:
+		print("OUNSAVE\t%d\n", inst->sub);
+		break;
+	case OANY:
+		print("OANY \t.\n");
+		break;
+	case OEOL:
+		print("OEOL \t$\n");
+		break;
+	case OBOL:
+		print("OBOL \t^\n");
+		break;
 	}
 }

@@ -3,6 +3,8 @@
 LIB=/$objtype/lib/libregex.a
 OFILES=\
 	regcomp.$O\
+	regerror.$O\
+	regexec.$O\
 
 HFILES=\
 	regex.h\

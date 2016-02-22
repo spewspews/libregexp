@@ -1,5 +1,20 @@
 #pragma src "/usr/ben/src/libregex"
 #pragma lib "libregex.a"
+enum
+{
+	OANY = 0,
+	OBOL,
+	OCLASS,
+	OEOL,
+	OJMP,
+	ONOTNL,
+	ORUNE,
+	OSAVE,
+	OSPLIT,
+	OUNSAVE,
+
+	NSUBEXP = 32
+};
 
 typedef struct Resub Resub;
 typedef struct Reinst Reinst;
@@ -32,6 +47,7 @@ struct Reinst
 	{
 		Rune r;
 		Reinst *a;
+		int sub;
 	};
 	union
 	{
@@ -52,3 +68,4 @@ struct Reprog
 Reprog *regcomp(char*);
 void regerror(char*);
 int regexec(Reprog*, char*, Resub*, int);
+void prinst(Reinst *);
