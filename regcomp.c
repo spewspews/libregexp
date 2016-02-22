@@ -359,7 +359,6 @@ getclass(Parselex *l)
 static Renode*
 buildclassn(Parselex *l)
 {
-	/* TODO handle newline */
 	Renode *n, *n1;
 	Rune *p;
 
@@ -379,6 +378,7 @@ buildclassn(Parselex *l)
 	n1->r1 = Runemax;
 	n = node(l, TOR, n, n1);
 
+	/* special case newline */
 	n1 = node(l, TNOTNL, nil, nil);
 	n1->r = L'\n';
 	n = node(l, TCAT, n1, n);
