@@ -1,5 +1,5 @@
-Libegexp
-=
+Another Regular Expression Library
+-
 
 This is a regular expression implementation. It draws on
 RSC's regular expression [exposition](https://swtch.com/~rsc/regexp/)
