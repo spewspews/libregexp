@@ -13,3 +13,6 @@ with the following clarifications:
 * `^` matches only the beginning of a string (not the character after newline)
 * `$` matches only the end of a string (not a newline)
 * a negated character class does not match newline (as specified in regexp(6))
+
+This implementation has the advantage of being thread-safe unlike libregexp
+in plan 9.
