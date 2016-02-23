@@ -5,6 +5,7 @@
 
 static int yylex(Parselex*);
 static void getnextr(Parselex*);
+static void getnextrlit(Parselex*);
 static void getclass(Parselex*);
 static Renode *e0(Parselex*);
 static Renode *e1(Parselex*);
@@ -13,6 +14,7 @@ static Renode *e3(Parselex*);
 static Renode *buildclass(Parselex*);
 static Renode *buildclassn(Parselex*);
 static int pcmp(void*, void*);
+Reprog *regcomp1(char*, int, int);
 static Reinst *compile(Renode*, Reprog*);
 static Reinst *compile1(Renode*, Reinst*, int*);
 static void prtree(Renode*, int, int);
@@ -122,7 +124,7 @@ e0(Parselex *plex)
 }
 
 Reprog*
-regcomp(char *regstr)
+regcomp1(char *regstr, int nl, int lit)
 {
 	Reprog *reprog;
 	Parselex plex;
@@ -137,12 +139,25 @@ regcomp(char *regstr)
 	plex.freep = plex.nodes;
 	plex.rawexp = regstr;
 	plex.sub = 0;
+	plex.getnextr = lit ? getnextrlit : getnextr;
 	parsetr = node(&plex, TSUB, e0(&plex), nil);
 //	prtree(parsetr, 0, 0);
 	reprog->startinst = compile(parsetr, reprog);
 	free(plex.nodes);
-	prprog(reprog);
+//	prprog(reprog);
 	return reprog;
+}
+
+Reprog*
+regcomp(char *str)
+{
+	return regcomp1(str, 0, 0);
+}
+
+Reprog*
+regcomplit(char *str)
+{
+	return regcomp1(str, 0, 1);
 }
 
 static Reinst*
@@ -155,12 +170,12 @@ compile1(Renode *renode, Reinst *reinst, int *sub)
 	case TRUNE:
 		reinst->op = ORUNE;
 		reinst->r = renode->r;
-		return ++reinst;
+		return reinst + 1;
 	case TCLASS:
 		reinst->op = OCLASS;
 		reinst->r = renode->r;
 		reinst->r1 = renode->r1;
-		return ++reinst;
+		return reinst + 1;
 	case TCAT:
 		reinst = compile1(renode->left, reinst, sub);
 		return compile1(renode->right, reinst, sub);
@@ -198,19 +213,20 @@ compile1(Renode *renode, Reinst *reinst, int *sub)
 		reinst = compile1(renode->left, reinst+1, sub);
 		reinst->op = OUNSAVE;
 		reinst->sub = s;
-		return reinst+1;
+		return reinst + 1;
 	case TANY:
+//		reinst++->op = ONOTNL;
 		reinst->op = OANY;
-		return ++reinst;
+		return reinst + 1;
 	case TNOTNL:
 		reinst->op = ONOTNL;
-		return ++reinst;
+		return reinst + 1;
 	case TEOL:
 		reinst->op = OEOL;
-		return ++reinst;
+		return reinst + 1;
 	case TBOL:
 		reinst->op = OBOL;
-		return ++reinst;
+		return reinst + 1;
 	}
 	return nil;
 }
@@ -239,8 +255,22 @@ getnextr(Parselex *l)
 	if(*l->rawexp == L'\\') {
 		l->rawexp += chartorune(&l->yyrune, l->rawexp);
 		l->literal = 1;
+	}
+	if(*l->rawexp == 0)
+		l->done = 1;
+	return;
+}
+
+static void
+getnextrlit(Parselex *l)
+{
+	l->literal = 1;
+	if(l->done) {
+		l->literal = 0;
+		l->yyrune = 0;
 		return;
 	}
+	l->rawexp += chartorune(&l->yyrune, l->rawexp);
 	if(*l->rawexp == 0)
 		l->done = 1;
 	return;
@@ -254,7 +284,7 @@ yylex(Parselex *l)
 		l->yypeek = 0;
 		return l->peek;
 	}
-	getnextr(l);
+	l->getnextr(l);
 	if(l->literal)
 		return l->peek = LRUNE;
 	switch(l->yyrune){
@@ -304,16 +334,16 @@ getclass(Parselex *l)
 	Rune *p, *q, t;
 
 	l->nc = 0;
-	getnextr(l);
+	l->getnextr(l);
 	if(l->yyrune == L'^') {
 		l->nc = 1;
-		getnextr(l);
+		l->getnextr(l);
 	}
 	p = l->cpairs;
 	p[0] = l->yyrune;
 	for(;;) {
 		if(l->yyrune == '\\') {
-			getnextr(l);
+			l->getnextr(l);
 			p[0] = l->yyrune;
 		}
 		if(l->yyrune == L']')
@@ -322,14 +352,14 @@ getclass(Parselex *l)
 		p += 2;
 		if(p >= l->cpairs + nelem(l->cpairs) - 2)
 			regerror("class too big");
-		getnextr(l);
+		l->getnextr(l);
 		if(l->yyrune != L'-') {
 			p[0] = l->yyrune;
 			continue;
 		}
-		getnextr(l);
+		l->getnextr(l);
 		if(l->yyrune == '\\')
-			getnextr(l);
+			l->getnextr(l);
 		if(l->yyrune == L']')
 			break;
 		p[-1] = l->yyrune;
@@ -338,7 +368,7 @@ getclass(Parselex *l)
 			p[-2] = p[-1];
 			p[-1] = t;
 		}
-		getnextr(l);
+		l->getnextr(l);
 		p[0] = l->yyrune;
 	}
 	*p = 0;
@@ -378,7 +408,6 @@ buildclassn(Parselex *l)
 	n1->r1 = Runemax;
 	n = node(l, TOR, n, n1);
 
-	/* special case newline */
 	n1 = node(l, TNOTNL, nil, nil);
 	n1->r = L'\n';
 	n = node(l, TCAT, n1, n);

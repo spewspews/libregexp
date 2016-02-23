@@ -66,6 +66,7 @@ struct Reprog
 };
 
 Reprog *regcomp(char*);
+Reprog *regcomplit(char*);
 void regerror(char*);
 int regexec(Reprog*, char*, Resub*, int);
 void prinst(Reinst *);

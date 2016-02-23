@@ -46,8 +46,8 @@ regexec(Reprog *prog, char *str, Resub *se, int msize)
 		i = chartorune(&r, sp);
 		firstmatch = 1;
 		for(t = clist->threads; t < clist->next; t++) {
-Again:
 			curinst = t->pc;
+Again:
 			switch(curinst->op) {
 			case ORUNE:
 				if(r == curinst->r)
@@ -65,39 +65,38 @@ Again:
 				break;
 			case ONOTNL:
 				if(r != L'\n') {
-					t->pc = curinst + 1;
+					curinst++;
 					goto Again;
 				}
 				break;
 			case OBOL:
-				if(sp == str) {
-					t->pc = curinst + 1;
+				if(sp == str || *(sp-1) == '\n') {
+					curinst++;
 					goto Again;
 				}
 				break;
 			case OEOL:
-				if(r == 0) {
-					t->pc = curinst + 1;
+				if(r == 0 || r == '\n') {
+					curinst++;
 					goto Again;
 				}
 				break;
 			case OJMP:
-				t->pc = curinst->a;
+				curinst = curinst->a;
 				goto Again;
 			case OSPLIT:
-				t->pc = curinst->a;
 				clist->next->pc = curinst->b;
 				memcpy(clist->next->se, t->se, sizeof(Resub)*msize);
 				clist->next++;
+				curinst = curinst->a;
 				goto Again;
 			case OSAVE:
 				if(curinst->sub < msize)
 					t->se[curinst->sub].sp = sp;
-				t->pc = curinst + 1;
+				curinst++;
 				goto Again;
 			case OUNSAVE:
 				t->se[curinst->sub].ep = sp;
-				t->pc = curinst + 1;
 				/* Earliest match is the left-most longest. */
 				if(curinst->sub == 0 && firstmatch) {
 					match = 1;
@@ -105,6 +104,7 @@ Again:
 					firstmatch = 0;
 					break;
 				}
+				curinst++;
 				goto Again;
 			}
 		}

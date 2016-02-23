@@ -34,6 +34,7 @@ struct Parselex
 	Renode *freep;
 	Renode *nodes;
 	int sub;
+	void (*getnextr)(Parselex*);
 	/* Lex */
 	char *rawexp;
 	Rune yyrune;

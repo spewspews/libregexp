@@ -7,15 +7,26 @@ main(int argc, char **argv)
 {
 	Reprog *reprog;
 	Resub resub[10], *subp;
-	int match, i;
+	int match, i, lit;
 	char c;
 
-	if(argc != 3) {
+	lit = 0;
+	ARGBEGIN {
+	case 'l':
+		lit = 1;
+		break;
+	} ARGEND
+
+	if(argc != 2) {
 		fprint(2, "regex and match string please\n");
 		exits("usage");
 	}
-	reprog = regcomp(argv[1]);
-	match = regexec(reprog, argv[2], resub, nelem(resub));
+
+	if(lit)
+		reprog = regcomplit(argv[0]);
+	else
+		reprog = regcomp(argv[0]);
+	match = regexec(reprog, argv[1], resub, nelem(resub));
 	if(match) {
 		for(i = 0; i < nelem(resub); i++) {
 			subp = resub+i;
