@@ -76,9 +76,14 @@ Again:
 				}
 				break;
 			case OEOL:
-				if(r == 0 || r == '\n') {
+				if(r == 0) {
 					curinst++;
 					goto Again;
+				}
+				if(r == '\n') {
+					nlist->next->pc = curinst + 1;
+					memcpy(nlist->next->se, t->se, sizeof(Resub)*msize);
+					nlist->next++;
 				}
 				break;
 			case OJMP:
