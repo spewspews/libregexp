@@ -15,6 +15,7 @@ enum
 	TBOL,
 	TCAT,
 	TCLASS,
+	TCLASSM,
 	TEOL,
 	TNOTNL,
 	TOR,
@@ -48,15 +49,13 @@ struct Parselex
 struct Renode
 {
 	int op;
-	union
-	{
-		Rune r;
-		Renode *left;
-	};
+	Renode *left;
+	Rune r;
 	union
 	{
 		Rune r1;
 		int sub;
 		Renode *right;
 	};
+	int nclass;
 };

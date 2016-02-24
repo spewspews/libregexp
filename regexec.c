@@ -24,8 +24,9 @@ regexec(Reprog *prog, char *str, Resub *se, int msize)
 	Reinst *curinst;
 	char *sp;
 	Rune r;
-	int i, match, firstmatch;
+	int i, match, firstmatch, j;
 
+	j = 0;
 	for(clist = lists; clist < lists + 2; clist++) {
 		clist->threads = calloc(sizeof(*clist->threads), prog->len+strlen(str));
 		if(clist->threads == nil)
@@ -60,6 +61,17 @@ Again:
 			case OANY:
 			Next:
 				nlist->next->pc = curinst + 1;
+				memcpy(nlist->next->se, t->se, sizeof(Resub)*msize);
+				nlist->next++;
+				break;
+			case OCLASSM:
+				if(r < curinst->r)
+					break;
+				if(r > curinst->r1) {
+					curinst++;
+					goto Again;
+				}
+				nlist->next->pc = curinst->a;
 				memcpy(nlist->next->se, t->se, sizeof(Resub)*msize);
 				nlist->next++;
 				break;

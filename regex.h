@@ -5,10 +5,12 @@ enum
 	OANY = 0,
 	OBOL,
 	OCLASS,
+	OCLASSM,
 	OEOL,
 	OJMP,
 	ONOTNL,
 	ORUNE,
+	ORUNEM,
 	OSAVE,
 	OSPLIT,
 	OUNSAVE,
@@ -43,10 +45,10 @@ struct Resub
 struct Reinst
 {
 	int op;
+	Reinst *a;
 	union
 	{
 		Rune r;
-		Reinst *a;
 		int sub;
 	};
 	union
