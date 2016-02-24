@@ -24,9 +24,8 @@ regexec(Reprog *prog, char *str, Resub *se, int msize)
 	Reinst *curinst;
 	char *sp;
 	Rune r;
-	int i, match, firstmatch, j;
+	int i, match, firstmatch, first;
 
-	j = 0;
 	for(clist = lists; clist < lists + 2; clist++) {
 		clist->threads = calloc(sizeof(*clist->threads), prog->len+strlen(str));
 		if(clist->threads == nil)
@@ -37,34 +36,23 @@ regexec(Reprog *prog, char *str, Resub *se, int msize)
 	nlist = lists+1;
 
 	match = 0;
-	r = 1;
+	r = Runemax + 1;
 	for(sp = str; r != 0; sp += i) {
-		/* We only want the left-most match. */
-		if(match == 0) {
-			clist->next->pc = prog->startinst;
-			clist->next++;
-		}
 		i = chartorune(&r, sp);
-		firstmatch = 1;
+		firstmatch = first = 1;
 		for(t = clist->threads; t < clist->next; t++) {
 			curinst = t->pc;
 Again:
 			switch(curinst->op) {
 			case ORUNE:
-				if(r == curinst->r)
-					goto Next;
-				break;
-			case OCLASS:
-				if((r >= curinst->r && r <= curinst->r1))
-					goto Next;
-				break;
-			case OANY:
-			Next:
+				if(r != curinst->r)
+					break;
+			case OANY: /* fallthrough */
 				nlist->next->pc = curinst + 1;
 				memcpy(nlist->next->se, t->se, sizeof(Resub)*msize);
 				nlist->next++;
 				break;
-			case OCLASSM:
+			case OCLASS:
 				if(r < curinst->r)
 					break;
 				if(r > curinst->r1) {
@@ -120,10 +108,21 @@ Again:
 				goto Again;
 			}
 		}
+		/* Try again once if we haven't found anything. */
+		if(first == 1 && match == 0) {
+			first = 0;
+			t = clist->next++;
+			curinst = prog->startinst;
+			goto Again;
+		}
 		tmp = clist;
 		clist = nlist;
 		nlist = tmp;
 		nlist->next = nlist->threads;
 	}
+
+	for(clist = lists; clist < lists + 2; clist++)
+		free(clist->threads);
+
 	return match;
 }

@@ -15,7 +15,6 @@ enum
 	TBOL,
 	TCAT,
 	TCLASS,
-	TCLASSM,
 	TEOL,
 	TNOTNL,
 	TOR,

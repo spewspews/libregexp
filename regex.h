@@ -5,7 +5,6 @@ enum
 	OANY = 0,
 	OBOL,
 	OCLASS,
-	OCLASSM,
 	OEOL,
 	OJMP,
 	ONOTNL,

@@ -177,11 +177,6 @@ compile1(Renode *renode, Reinst *reinst, int *sub)
 		reinst->op = OCLASS;
 		reinst->r = renode->r;
 		reinst->r1 = renode->r1;
-		return reinst + 1;
-	case TCLASSM:
-		reinst->op = OCLASSM;
-		reinst->r = renode->r;
-		reinst->r1 = renode->r1;
 		reinst->a = reinst + 1 + renode->nclass;
 		return compile1(renode->left, reinst+1, sub);
 	case TCAT:
@@ -397,80 +392,47 @@ getclass(Parselex *l)
 static Renode*
 buildclassn(Parselex *l)
 {
-	Renode *n, *n1;
+	Renode *n;
 	Rune *p;
+	int i;
 
-	p = l->cpairs;
+	i = 0;
 	n = node(l, TCLASS, nil, nil);
-	n->r = 0;
-	n->r1 = p[0] - 1;
-
-	for(p += 2; *p != 0; p += 2) {
-		n1 = node(l, TCLASS, nil, nil);
-		n1->r = p[-1] + 1;
-		n1->r1 = p[0] - 1;
-		n = node(l, TOR, n, n1);
-	}
-	n1 = node(l, TCLASS, nil, nil);
-	n1->r = p[-1] + 1;
-	n1->r1 = Runemax;
-	n = node(l, TOR, n, n1);
-
-	n1 = node(l, TNOTNL, nil, nil);
-	n1->r = L'\n';
-	n = node(l, TCAT, n1, n);
-	return n;
-}
-
-static Renode*
-oldbuildclass(Parselex *l)
-{
-	Renode *n, *n1;
-	Rune *p;
+	n->r = Runemax + 1;
+	n->nclass = i++;
 
 	p = l->cpairs;
-	if(p[0] != p[1]) {
-		n = node(l, TCLASS, nil, nil);
-		n->r = p[0];
-		n->r1 = p[1];
-	} else {
-		n = node(l, TRUNE, nil, nil);
-		n->r = p[0];
-	}
+	n = node(l, TCLASS, n, nil);
+	n->r = p[1] + 1;
+	n->r1 = Runemax;
+	n->nclass = i++;
 	for(p += 2; *p != 0; p += 2) {
-		if(p[0] != p[1]) {
-			n1 = node(l, TCLASS, nil, nil);
-			n1->r = p[0];
-			n1->r1 = p[1];
-			n = node(l, TOR, n, n1);
-		} else {
-			n1 = node(l, TRUNE, nil, nil);
-			n1->r = p[0];
-			n = node(l, TOR, n, n1);
-		}
+		n = node(l, TCLASS, n, nil);
+		n->r = p[1] + 1;
+		n->r1 = p[-2] - 1;
+		n->nclass = i++;
 	}
-	return n;
+	n = node(l, TCLASS, n, nil);
+	n->r = 0;
+	n->r1 = p[-2] - 1;
+	n->nclass = i;
+	return node(l, TCAT, node(l, TNOTNL, nil, nil), n);
 }
 
 static Renode*
 buildclass(Parselex *l)
 {
-	Renode *n, *n1;
+	Renode *n;
 	Rune *p;
 	int i;
 
 	i = 0;
-	n = node(l, TCLASSM, nil, nil);
+	n = node(l, TCLASS, nil, nil);
 	n->r = Runemax + 1;
 	n->nclass = i++;
 
-	p = l->cpairs;
-	n = node(l, TCLASSM, n, nil);
-	n->r = p[0];
-	n->r1 = p[1];
-	n->nclass = i++;
-	for(p += 2; *p != 0; p += 2) {
-		n = node(l, TCLASSM, n, nil);
+	for(p = l->cpairs; *p != 0; p += 2) {
+		n = node(l, TCLASS, n, nil);
 		n->r = p[0];
 		n->r1 = p[1];
 		n->nclass = i++;
@@ -535,9 +497,6 @@ prtree(Renode *tree, int d, int f)
 		break;
 	case TCLASS:
 		print("CLASS: %C-%C\n", tree->r, tree->r1);
-		break;
-	case TCLASSM:
-		print("CLASSM: %C-%C\n", tree->r, tree->r1);
 		prtree(tree->left, d, 1);
 		break;
 	}
@@ -565,10 +524,7 @@ prinst(Reinst *inst)
 		print("ONOTNL\n");
 		break;
 	case OCLASS:
-		print("OCLASS\t%C-%C\n", inst->r, inst->r1);
-		break;
-	case OCLASSM:
-		print("OCLASSM\t%C-%C %p\n", inst->r, inst->r1, inst->a);
+		print("OCLASS\t%C-%C %p\n", inst->r, inst->r1, inst->a);
 		break;
 	case OSPLIT:
 		print("OSPLIT\t%p %p\n", inst->a, inst->b);
