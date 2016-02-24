@@ -389,6 +389,7 @@ getclass(Parselex *l)
 	q[2] = 0;
 }
 
+/* classes are in descending order */
 static Renode*
 buildclassn(Parselex *l)
 {
@@ -397,25 +398,19 @@ buildclassn(Parselex *l)
 	int i;
 
 	i = 0;
-	n = node(l, TCLASS, nil, nil);
-	n->r = Runemax + 1;
-	n->nclass = i++;
-
 	p = l->cpairs;
-	n = node(l, TCLASS, n, nil);
+	n = node(l, TCLASS, nil, nil);
 	n->r = p[1] + 1;
 	n->r1 = Runemax;
 	n->nclass = i++;
-	for(p += 2; *p != 0; p += 2) {
+
+	for(; *p != 0; p += 2) {
 		n = node(l, TCLASS, n, nil);
-		n->r = p[1] + 1;
-		n->r1 = p[-2] - 1;
+		n->r = p[3] + 1;
+		n->r1 = p[0] - 1;
 		n->nclass = i++;
 	}
-	n = node(l, TCLASS, n, nil);
 	n->r = 0;
-	n->r1 = p[-2] - 1;
-	n->nclass = i;
 	return node(l, TCAT, node(l, TNOTNL, nil, nil), n);
 }
 
