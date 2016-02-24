@@ -113,13 +113,16 @@ Again:
 				goto Again;
 			}
 		}
-		/* Try again once if we haven't found anything. */
+		/* Start again once if we haven't found anything. */
 		if(first == 1 && match == 0) {
 			first = 0;
 			t = clist->next++;
 			curinst = prog->startinst;
 			goto Again;
 		}
+		/* If we have a match and no extant threads, we are done. */
+		if(match == 1 && nlist->next == nlist->threads)
+			break;
 		tmp = clist;
 		clist = nlist;
 		nlist = tmp;
