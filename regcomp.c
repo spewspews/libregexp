@@ -15,11 +15,11 @@ static Renode *buildclass(Parselex*);
 static Renode *buildclassn(Parselex*);
 static int pcmp(void*, void*);
 Reprog *regcomp1(char*, int, int);
-static Reinst *compile(Renode*, Reprog*);
-static Reinst *compile1(Renode*, Reinst*, int*);
+static Reinst *compile(Renode*, Reprog*, int);
+static Reinst *compile1(Renode*, Reinst*, int*, int);
 static void prtree(Renode*, int, int);
 static void prprog(Reprog*);
-//static void prinst(Reinst*);
+static void prinst(Reinst*);
 
 static Renode*
 node(Parselex *plex, int op, Renode *l, Renode *r)
@@ -89,6 +89,20 @@ e2(Parselex *plex)
 }
 
 static Renode*
+invert(Renode *n)
+{
+	Renode *n1;
+
+	while(n->left->op == TCAT) {
+		n1 = n->left;
+		n->left = n1->right;
+		n1->right = n;
+		n = n1;
+	}
+	return n;
+}
+
+static Renode*
 e1(Parselex *plex)
 {
 	Renode *n, *n1;
@@ -104,7 +118,7 @@ e1(Parselex *plex)
 		n = node(plex, TCAT, n, n1);
 	}
 	plex->yypeek = plex->yyrune;
-	return n;
+	return invert(n);
 }
 
 static Renode*
@@ -142,7 +156,7 @@ regcomp1(char *regstr, int nl, int lit)
 	plex.getnextr = lit ? getnextrlit : getnextr;
 	parsetr = node(&plex, TSUB, e0(&plex), nil);
 	prtree(parsetr, 0, 0);
-	reprog->startinst = compile(parsetr, reprog);
+	reprog->startinst = compile(parsetr, reprog, nl);
 	free(plex.nodes);
 	prprog(reprog);
 	return reprog;
@@ -160,12 +174,19 @@ regcomplit(char *str)
 	return regcomp1(str, 0, 1);
 }
 
+Reprog*
+regcompnl(char *str)
+{
+	return regcomp1(str, 1, 0);
+}
+
 static Reinst*
-compile1(Renode *renode, Reinst *reinst, int *sub)
+compile1(Renode *renode, Reinst *reinst, int *sub, int nl)
 {
 	Reinst *i;
 	int s;
 
+Tailcall:
 	if(renode == nil)
 		return reinst;
 	switch(renode->op) {
@@ -178,29 +199,32 @@ compile1(Renode *renode, Reinst *reinst, int *sub)
 		reinst->r = renode->r;
 		reinst->r1 = renode->r1;
 		reinst->a = reinst + 1 + renode->nclass;
-		return compile1(renode->left, reinst+1, sub);
+		renode = renode->left;
+		reinst++;
+		goto Tailcall;
 	case TCAT:
-		reinst = compile1(renode->left, reinst, sub);
-		return compile1(renode->right, reinst, sub);
+		reinst = compile1(renode->left, reinst, sub, nl);
+		renode = renode->right;
+		goto Tailcall;
 	case TOR:
 		reinst->op = OSPLIT;
 		reinst->a = reinst + 1;
-		i = compile1(renode->left, reinst->a, sub);
+		i = compile1(renode->left, reinst->a, sub, nl);
 		reinst->b = i + 1;
 		i->op = OJMP;
-		i->a = compile1(renode->right, reinst->b, sub);
+		i->a = compile1(renode->right, reinst->b, sub, nl);
 		return i->a;
 	case TSTAR:
 		reinst->op = OSPLIT;
 		reinst->a = reinst + 1;
-		i = compile1(renode->left, reinst->a, sub);
+		i = compile1(renode->left, reinst->a, sub, nl);
 		reinst->b = i + 1;
 		i->op = OJMP;
 		i->a = reinst;
 		return reinst->b;
 	case TPLUS:
 		i = reinst;
-		reinst = compile1(renode->left, reinst, sub);
+		reinst = compile1(renode->left, reinst, sub, nl);
 		reinst->op = OSPLIT;
 		reinst->a = i;
 		reinst->b = reinst + 1;
@@ -208,17 +232,18 @@ compile1(Renode *renode, Reinst *reinst, int *sub)
 	case TQUES:
 		reinst->op = OSPLIT;
 		reinst->a = reinst + 1;
-		reinst->b = compile1(renode->left, reinst->a, sub);
+		reinst->b = compile1(renode->left, reinst->a, sub, nl);
 		return reinst->b;
 	case TSUB:
 		reinst->op = OSAVE;
 		reinst->sub = s = (*sub)++;
-		reinst = compile1(renode->left, reinst+1, sub);
+		reinst = compile1(renode->left, reinst+1, sub, nl);
 		reinst->op = OUNSAVE;
 		reinst->sub = s;
 		return reinst + 1;
 	case TANY:
-//		reinst++->op = ONOTNL;
+		if(nl == 0)
+			reinst++->op = ONOTNL;
 		reinst->op = OANY;
 		return reinst + 1;
 	case TNOTNL:
@@ -235,13 +260,13 @@ compile1(Renode *renode, Reinst *reinst, int *sub)
 }
 
 static Reinst*
-compile(Renode *parsetr, Reprog *reprog)
+compile(Renode *parsetr, Reprog *reprog, int nl)
 {
 	Reinst *reinst, *end;
 	int sub;
 
 	reinst = (Reinst*)(reprog+1);
-	end = compile1(parsetr, reinst, &sub);
+	end = compile1(parsetr, reinst, &sub, nl);
 	reprog->len = end - reinst;
 	return reinst;
 }
@@ -507,7 +532,7 @@ prprog(Reprog *reprog)
 		prinst(inst);
 }
 
-void
+static void
 prinst(Reinst *inst)
 {
 	print("%p ", inst);

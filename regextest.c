@@ -7,13 +7,17 @@ main(int argc, char **argv)
 {
 	Reprog *reprog;
 	Resub resub[10], *subp;
-	int match, i, lit;
+	int match, i, lit, nl;
 	char c;
 
 	lit = 0;
+	nl = 0;
 	ARGBEGIN {
 	case 'l':
-		lit = 1;
+		lit++;
+		break;
+	case 'n':
+		nl++;
 		break;
 	} ARGEND
 
@@ -24,6 +28,8 @@ main(int argc, char **argv)
 
 	if(lit)
 		reprog = regcomplit(argv[0]);
+	else if(nl)
+		reprog = regcompnl(argv[0]);
 	else
 		reprog = regcomp(argv[0]);
 	match = regexec(reprog, argv[1], resub, nelem(resub));
