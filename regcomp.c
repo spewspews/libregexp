@@ -93,6 +93,8 @@ invert(Renode *n)
 {
 	Renode *n1;
 
+	if(n->left == nil)
+		return n;
 	while(n->left->op == TCAT) {
 		n1 = n->left;
 		n->left = n1->right;
