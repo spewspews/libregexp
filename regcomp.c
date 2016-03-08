@@ -37,9 +37,8 @@ static Renode*
 e3(Parselex *plex)
 {
 	Renode *n;
-	int sym;
 
-	switch(sym = yylex(plex)) {
+	switch(yylex(plex)) {
 	case LANY:
 		return node(plex, TANY, nil, nil);
 	case LBOL:
@@ -61,7 +60,6 @@ e3(Parselex *plex)
 			regerror("no matching parenthesis");
 		return n;
 	default:
-		print("%d\n", sym); 
 		regerror("nope");
 		break;
 	}
@@ -93,7 +91,7 @@ invert(Renode *n)
 {
 	Renode *n1;
 
-	if(n->left == nil)
+	if(n->op != TCAT)
 		return n;
 	while(n->left->op == TCAT) {
 		n1 = n->left;
@@ -107,7 +105,7 @@ invert(Renode *n)
 static Renode*
 e1(Parselex *plex)
 {
-	Renode *n, *n1;
+	Renode *n;
 	int sym;
 
 	n = e2(plex);
@@ -116,8 +114,7 @@ e1(Parselex *plex)
 		if(sym == LEND || sym == LOR || sym == LRPAR)
 			break;
 		plex->yypeek = plex->yyrune;
-		n1 = e2(plex);
-		n = node(plex, TCAT, n, n1);
+		n = node(plex, TCAT, n, e2(plex));
 	}
 	plex->yypeek = plex->yyrune;
 	return invert(n);
@@ -126,14 +123,13 @@ e1(Parselex *plex)
 static Renode*
 e0(Parselex *plex)
 {
-	Renode *n, *n1;
+	Renode *n;
 
 	n = e1(plex);
 	for(;;) {
 		if(yylex(plex) != LOR)
 			break;
-		n1 = e1(plex);
-		n = node(plex, TOR, n, n1);
+		n = node(plex, TOR, n, e1(plex));
 	}
 	plex->yypeek = plex->yyrune;
 	return n;
