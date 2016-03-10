@@ -37,9 +37,9 @@ struct Parselex
 	void (*getnextr)(Parselex*);
 	/* Lex */
 	char *rawexp;
-	Rune yyrune;
-	Rune yypeek;
-	int peek;
+	Rune rune;
+	Rune peek;
+	int peeklex;
 	int done;
 	int literal;
 	Rune cpairs[200+2];

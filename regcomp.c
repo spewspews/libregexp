@@ -3,7 +3,7 @@
 #include "regex.h"
 #include "regcomp.h"
 
-static int yylex(Parselex*);
+static int lex(Parselex*);
 static void getnextr(Parselex*);
 static void getnextrlit(Parselex*);
 static void getclass(Parselex*);
@@ -38,7 +38,7 @@ e3(Parselex *plex)
 {
 	Renode *n;
 
-	switch(yylex(plex)) {
+	switch(lex(plex)) {
 	case LANY:
 		return node(plex, TANY, nil, nil);
 	case LBOL:
@@ -47,7 +47,7 @@ e3(Parselex *plex)
 		return node(plex, TEOL, nil, nil);
 	case LRUNE:
 		n = node(plex, TRUNE, nil, nil);
-		n->r = plex->yyrune;
+		n->r = plex->rune;
 		return n;
 	case LCLASS:
 		if(plex->nc)
@@ -56,7 +56,7 @@ e3(Parselex *plex)
 	case LLPAR:
 		n = e0(plex);
 		n = node(plex, TSUB, n, nil);
-		if(yylex(plex) != LRPAR)
+		if(lex(plex) != LRPAR)
 			regerror("no matching parenthesis");
 		return n;
 	default:
@@ -72,8 +72,8 @@ e2(Parselex *plex)
 	Renode *n;
 
 	n = e3(plex);
-	if(yylex(plex) == LREP) {
-		switch(plex->yyrune) {
+	if(lex(plex) == LREP) {
+		switch(plex->rune) {
 		case L'*':
 			return node(plex, TSTAR, n, nil);
 		case L'+':
@@ -82,7 +82,7 @@ e2(Parselex *plex)
 			return node(plex, TQUES, n, nil);
 		}
 	}
-	plex->yypeek = plex->yyrune;
+	plex->peek = 1;
 	return n;
 }
 
@@ -110,13 +110,13 @@ e1(Parselex *plex)
 
 	n = e2(plex);
 	for(;;) {
-		sym = yylex(plex);
+		sym = lex(plex);
 		if(sym == LEND || sym == LOR || sym == LRPAR)
 			break;
-		plex->yypeek = plex->yyrune;
+		plex->peek = 1;
 		n = node(plex, TCAT, n, e2(plex));
 	}
-	plex->yypeek = plex->yyrune;
+	plex->peek = 1;
 	return invert(n);
 }
 
@@ -127,11 +127,11 @@ e0(Parselex *plex)
 
 	n = e1(plex);
 	for(;;) {
-		if(yylex(plex) != LOR)
+		if(lex(plex) != LOR)
 			break;
 		n = node(plex, TOR, n, e1(plex));
 	}
-	plex->yypeek = plex->yyrune;
+	plex->peek = 1;
 	return n;
 }
 
@@ -274,12 +274,12 @@ getnextr(Parselex *l)
 {
 	l->literal = 0;
 	if(l->done) {
-		l->yyrune = 0;
+		l->rune = 0;
 		return;
 	}
-	l->rawexp += chartorune(&l->yyrune, l->rawexp);
+	l->rawexp += chartorune(&l->rune, l->rawexp);
 	if(*l->rawexp == L'\\') {
-		l->rawexp += chartorune(&l->yyrune, l->rawexp);
+		l->rawexp += chartorune(&l->rune, l->rawexp);
 		l->literal = 1;
 	}
 	if(*l->rawexp == 0)
@@ -293,50 +293,49 @@ getnextrlit(Parselex *l)
 	l->literal = 1;
 	if(l->done) {
 		l->literal = 0;
-		l->yyrune = 0;
+		l->rune = 0;
 		return;
 	}
-	l->rawexp += chartorune(&l->yyrune, l->rawexp);
+	l->rawexp += chartorune(&l->rune, l->rawexp);
 	if(*l->rawexp == 0)
 		l->done = 1;
 	return;
 }
 
 static int
-yylex(Parselex *l)
+lex(Parselex *l)
 {
-	if(l->yypeek) {
-		l->yyrune = l->yypeek;
-		l->yypeek = 0;
-		return l->peek;
+	if(l->peek) {
+		l->peek = 0;
+		return l->peeklex;
 	}
 	l->getnextr(l);
 	if(l->literal)
-		return l->peek = LRUNE;
-	switch(l->yyrune){
+		return l->peeklex = LRUNE;
+	switch(l->rune){
 	case 0:
-		return l->peek = LEND;
+		return l->peeklex = LEND;
 	case L'*':
 	case L'?':
 	case L'+':
-		return l->peek = LREP;
+		return l->peeklex = LREP;
 	case L'|':
-		return l->peek = LOR;
+		return l->peeklex = LOR;
 	case L'.':
-		return l->peek = LANY;
+		return l->peeklex = LANY;
 	case L'(':
-		return l->peek = LLPAR;
+		return l->peeklex = LLPAR;
 	case L')':
-		return l->peek = LRPAR;
+		return l->peeklex = LRPAR;
 	case L'^':
-		return l->peek = LBOL;
+		return l->peeklex = LBOL;
 	case L'$':
-		return l->peek = LEOL;
+		return l->peeklex = LEOL;
 	case L'[':
 		getclass(l);
-		return l->peek = LCLASS;
+		return l->peeklex = LCLASS;
 	}
-	return l->peek = LRUNE;
+	return l->peeklex = LRUNE;
 }
 
 static int
@@ -361,41 +360,41 @@ getclass(Parselex *l)
 
 	l->nc = 0;
 	l->getnextr(l);
-	if(l->yyrune == L'^') {
+	if(l->rune == L'^') {
 		l->nc = 1;
 		l->getnextr(l);
 	}
 	p = l->cpairs;
-	p[0] = l->yyrune;
+	p[0] = l->rune;
 	for(;;) {
-		if(l->yyrune == '\\') {
+		if(l->rune == '\\') {
 			l->getnextr(l);
-			p[0] = l->yyrune;
+			p[0] = l->rune;
 		}
-		if(l->yyrune == L']')
+		if(l->rune == L']')
 			break;
-		p[1] = l->yyrune;
+		p[1] = l->rune;
 		p += 2;
 		if(p >= l->cpairs + nelem(l->cpairs) - 2)
 			regerror("class too big");
 		l->getnextr(l);
-		if(l->yyrune != L'-') {
-			p[0] = l->yyrune;
+		if(l->rune != L'-') {
+			p[0] = l->rune;
 			continue;
 		}
 		l->getnextr(l);
-		if(l->yyrune == '\\')
+		if(l->rune == '\\')
 			l->getnextr(l);
-		if(l->yyrune == L']')
+		if(l->rune == L']')
 			break;
-		p[-1] = l->yyrune;
+		p[-1] = l->rune;
 		if(p[-2] > p[-1]) {
 			t = p[-2];
 			p[-2] = p[-1];
 			p[-1] = t;
 		}
 		l->getnextr(l);
-		p[0] = l->yyrune;
+		p[0] = l->rune;
 	}
 	*p = 0;
 	qsort(l->cpairs, (p - l->cpairs)/2, 2*sizeof(*l->cpairs), pcmp);
