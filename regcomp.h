@@ -37,6 +37,7 @@ struct Parselex
 	void (*getnextr)(Parselex*);
 	/* Lex */
 	char *rawexp;
+	char *orig;
 	Rune rune;
 	Rune peek;
 	int peeklex;
@@ -58,3 +59,21 @@ struct Renode
 	};
 	int nclass;
 };
+
+static int lex(Parselex*);
+static void getnextr(Parselex*);
+static void getnextrlit(Parselex*);
+static void getclass(Parselex*);
+static Renode *e0(Parselex*);
+static Renode *e1(Parselex*);
+static Renode *e2(Parselex*);
+static Renode *e3(Parselex*);
+static Renode *buildclass(Parselex*);
+static Renode *buildclassn(Parselex*);
+static int pcmp(void*, void*);
+static Reprog *regcomp1(char*, int, int);
+static Reinst *compile(Renode*, Reprog*, int);
+static Reinst *compile1(Renode*, Reinst*, int*, int);
+static void prtree(Renode*, int, int);
+static void prprog(Reprog*);
+static void prinst(Reinst*);

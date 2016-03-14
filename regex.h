@@ -12,6 +12,7 @@ enum
 	ORUNEM,
 	OSAVE,
 	OSPLIT,
+	OSPLITSUB,
 	OUNSAVE,
 
 	NSUBEXP = 32
@@ -63,6 +64,7 @@ struct Reinst
 struct Reprog
 {
 	Reinst *startinst; /* start pc */
+	char *regstr;
 	int len;
 };
 
@@ -71,3 +73,6 @@ Reprog *regcomplit(char*);
 Reprog *regcompnl(char*);
 void regerror(char*);
 int regexec(Reprog*, char*, Resub*, int);
+void regsub(char*, char*, int, Resub*, int);
+int rregexec(Reprog*, Rune*, Resub*, int);
+void rregsub(Rune*, Rune*, int, Resub*, int);

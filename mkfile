@@ -5,6 +5,9 @@ OFILES=\
 	regcomp.$O\
 	regerror.$O\
 	regexec.$O\
+	regsub.$O\
+	rregexec.$O\
+	rregsub.$O\
 
 HFILES=\
 	regex.h\

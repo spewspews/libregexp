@@ -3,24 +3,6 @@
 #include "regex.h"
 #include "regcomp.h"
 
-static int lex(Parselex*);
-static void getnextr(Parselex*);
-static void getnextrlit(Parselex*);
-static void getclass(Parselex*);
-static Renode *e0(Parselex*);
-static Renode *e1(Parselex*);
-static Renode *e2(Parselex*);
-static Renode *e3(Parselex*);
-static Renode *buildclass(Parselex*);
-static Renode *buildclassn(Parselex*);
-static int pcmp(void*, void*);
-Reprog *regcomp1(char*, int, int);
-static Reinst *compile(Renode*, Reprog*, int);
-static Reinst *compile1(Renode*, Reinst*, int*, int);
-static void prtree(Renode*, int, int);
-static void prprog(Reprog*);
-static void prinst(Reinst*);
-
 static Renode*
 node(Parselex *plex, int op, Renode *l, Renode *r)
 {
@@ -36,6 +18,7 @@ node(Parselex *plex, int op, Renode *l, Renode *r)
 static Renode*
 e3(Parselex *plex)
 {
+	char error[128];
 	Renode *n;
 
 	switch(lex(plex)) {
@@ -56,11 +39,17 @@ e3(Parselex *plex)
 	case LLPAR:
 		n = e0(plex);
 		n = node(plex, TSUB, n, nil);
-		if(lex(plex) != LRPAR)
-			regerror("no matching parenthesis");
+		if(lex(plex) != LRPAR) {
+			regerror("No matching parenthesis");
+			break;
+		}
 		return n;
 	default:
-		regerror("nope");
+		if(plex->rune)
+			snprint(error, sizeof(error), "%s: syntax error: %C", plex->orig, plex->rune);
+		else
+			snprint(error, sizeof(error), "%s: Parsing error", plex->orig);
+		regerror(error);
 		break;
 	}
 	return nil;
@@ -135,7 +124,7 @@ e0(Parselex *plex)
 	return n;
 }
 
-Reprog*
+static Reprog*
 regcomp1(char *regstr, int nl, int lit)
 {
 	Reprog *reprog;
@@ -149,14 +138,15 @@ regcomp1(char *regstr, int nl, int lit)
 	if(reprog == nil || plex.nodes == nil)
 		return nil;
 	plex.freep = plex.nodes;
-	plex.rawexp = regstr;
+	plex.rawexp = plex.orig = regstr;
 	plex.sub = 0;
 	plex.getnextr = lit ? getnextrlit : getnextr;
 	parsetr = node(&plex, TSUB, e0(&plex), nil);
-	prtree(parsetr, 0, 0);
+//	prtree(parsetr, 0, 0);
 	reprog->startinst = compile(parsetr, reprog, nl);
+	reprog->regstr = regstr;
 	free(plex.nodes);
-	prprog(reprog);
+//	prprog(reprog);
 	return reprog;
 }
 
@@ -188,10 +178,6 @@ Tailcall:
 	if(renode == nil)
 		return reinst;
 	switch(renode->op) {
-	case TRUNE:
-		reinst->op = ORUNE;
-		reinst->r = renode->r;
-		return reinst + 1;
 	case TCLASS:
 		reinst->op = OCLASS;
 		reinst->r = renode->r;
@@ -205,7 +191,7 @@ Tailcall:
 		renode = renode->right;
 		goto Tailcall;
 	case TOR:
-		reinst->op = OSPLIT;
+		reinst->op = OSPLITSUB;
 		reinst->a = reinst + 1;
 		i = compile1(renode->left, reinst->a, sub, nl);
 		reinst->b = i + 1;
@@ -243,6 +229,10 @@ Tailcall:
 		if(nl == 0)
 			reinst++->op = ONOTNL;
 		reinst->op = OANY;
+		return reinst + 1;
+	case TRUNE:
+		reinst->op = ORUNE;
+		reinst->r = renode->r;
 		return reinst + 1;
 	case TNOTNL:
 		reinst->op = ONOTNL;
@@ -373,10 +363,16 @@ getclass(Parselex *l)
 		}
 		if(l->rune == L']')
 			break;
+		if(l->rune == 0) {
+			regerror("No closing ] for class");
+			return;
+		}
 		p[1] = l->rune;
 		p += 2;
-		if(p >= l->cpairs + nelem(l->cpairs) - 2)
-			regerror("class too big");
+		if(p >= l->cpairs + nelem(l->cpairs) - 2) {
+			regerror("Class too big");
+			return;
+		}
 		l->getnextr(l);
 		if(l->rune != L'-') {
 			p[0] = l->rune;
@@ -545,6 +541,9 @@ prinst(Reinst *inst)
 		break;
 	case OSPLIT:
 		print("OSPLIT\t%p %p\n", inst->a, inst->b);
+		break;
+	case OSPLITSUB:
+		print("OSPLITSUB\t%p %p\n", inst->a, inst->b);
 		break;
 	case OJMP:
 		print("OJMP \t%p\n", inst->a);
