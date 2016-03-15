@@ -44,7 +44,7 @@ struct Resub
  */
 struct Reinst
 {
-	int op;
+	char op;
 	Reinst *a;
 	union
 	{
