@@ -5,7 +5,9 @@
 void
 str2runes(Rune *dst, int dlen, char *src)
 {
-	Rune *ep = dst + dlen-1;
+	Rune *ep;
+
+	ep = dst + dlen-1;
 	while(*src != 0) {
 		src += chartorune(dst++, src);
 		if(dst == ep)

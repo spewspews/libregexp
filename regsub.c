@@ -26,20 +26,23 @@ regsub(char *src, char *dst, int dlen, Resub *match, int msize)
 			if(match != nil && i < msize && match[i].sp != nil) {
 				c = *match[i].ep;
 				*match[i].ep = '\0';
-				dst = strecpy(dst, ep, match[i].sp);
+				dst = strecpy(dst, ep+1, match[i].sp);
 				*match[i].ep = c;
 			}
 			break;
 		case '\\':
 			if(dst < ep)
 				*dst++ = '\\';
+			else
+				goto End;
 			break;
 		case '\0':
-			src--;
-			break;
+			goto End;
 		default:
 			if(dst < ep)
 				*dst++ = *src;
+			else
+				goto End;
 			break;
 		}
 		break;
@@ -47,14 +50,17 @@ regsub(char *src, char *dst, int dlen, Resub *match, int msize)
 		if(match != nil && msize > 0 && match[0].sp != nil) {
 			c = *match[0].ep;
 			*match[0].ep = '\0';
-			dst = strecpy(dst, ep, match[0].sp);
+			dst = strecpy(dst, ep+1, match[0].sp);
 			*match[0].ep = c;
 		}
 		break;
 	default:
 		if(dst < ep)
 			*dst++ = *src;
+		else
+			goto End;
 		break;
 	}
+End:
 	*dst = '\0';
 }

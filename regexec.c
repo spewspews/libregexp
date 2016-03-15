@@ -29,20 +29,20 @@ struct Resubreflist
 	Resubref **next;
 };
 
-void
+static void
 freesubref(Resubref *subref)
 {
 	free(subref->sem);
 	free(subref);
 }
 
-void
+static void
 pushsubref(Resubreflist *list, Resubref *sub)
 {
 	*list->next++ = sub;
 }
 
-Resubref*
+static Resubref*
 popsubref(Resubreflist *list, int msize)
 {
 	Resubref *sub;
@@ -50,11 +50,18 @@ popsubref(Resubreflist *list, int msize)
 
 	if(list->next == list->subs) {
 		sub = malloc(sizeof(*sub));
+		if(sub == nil)
+			goto Fail;
 		sub->sem = calloc(sizeof(*sub->sem), msize);
+		if(sub->sem == nil)
+			goto Fail;
 	} else
 		sub = *(--list->next);
 	sub->ref = 0;
 	return sub;
+Fail:
+	regerror("Out of memory");
+	return nil;
 }
 
 int
@@ -80,6 +87,10 @@ regexec(Reprog *prog, char *str, Resub *sem, int msize)
 		clist->next = clist->threads;
 	}
 	sublist.subs = calloc(sizeof(*sublist.subs), utflen(prog->regstr));
+	if(sublist.subs == nil) {
+		regerror("Out of memory");
+		return 0;
+	}
 	sublist.next = sublist.subs;
 	clist = lists;
 	nlist = lists+1;
@@ -98,8 +109,7 @@ Again:
 					goto Threaddone;
 			case OANY: /* fallthrough */
 				nlist->next->pc = curinst + 1;
-				if(msize)
-					nlist->next->submatch = t->submatch;
+				nlist->next->submatch = t->submatch;
 				nlist->next++;
 				break;
 			case OCLASS:
@@ -110,8 +120,7 @@ Again:
 					goto Again;
 				}
 				nlist->next->pc = curinst->a;
-				if(msize)
-					nlist->next->submatch = t->submatch;
+				nlist->next->submatch = t->submatch;
 				nlist->next++;
 				break;
 			case ONOTNL:
@@ -133,8 +142,7 @@ Again:
 				}
 				if(r == '\n') {
 					nlist->next->pc = curinst + 1;
-					if(msize)
-						nlist->next->submatch = t->submatch;
+					nlist->next->submatch = t->submatch;
 					nlist->next++;
 				}
 				goto Threaddone;
@@ -169,7 +177,7 @@ Again:
 			case OUNSAVE:
 				if(curinst->sub < msize)
 					t->submatch->sem[curinst->sub].ep = sp;
-				/* Earliest match is the left-most longest. */
+				/* First match is the left-most longest. */
 				if(curinst->sub == 0 && firstmatch) {
 					firstmatch = 0;
 					match = 1;
@@ -211,5 +219,6 @@ Again:
 		free(clist->threads);
 	for(matchp = sublist.subs; matchp < sublist.next; matchp++)
 		freesubref(*matchp);
+	free(sublist.subs);
 	return match;
 }

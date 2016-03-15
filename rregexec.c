@@ -1,34 +1,77 @@
 #include <u.h>
 #include <libc.h>
+#include <thread.h>
 #include "regex.h"
 
 typedef struct Thread Thread;
 typedef struct Threadlist Threadlist;
-typedef struct Resublist Resublist;
+typedef struct Resubref Resubref;
+typedef struct Resubreflist Resubreflist;
 
 struct Thread
 {
 	Reinst *pc;
-	Resub *se;
+	Resubref *submatch;
 };
 struct Threadlist
 {
 	Thread *threads;
 	Thread *next;
 };
-struct Resublist
+struct Resubref
 {
-	Resub *se;
-	Resub *next;
+	Ref;
+	Resub *sem;
+};
+struct Resubreflist
+{
+	Resubref **subs;
+	Resubref **next;
 };
 
+static void
+freesubref(Resubref *subref)
+{
+	free(subref->sem);
+	free(subref);
+}
+
+static void
+pushsubref(Resubreflist *list, Resubref *sub)
+{
+	*list->next++ = sub;
+}
+
+static Resubref*
+popsubref(Resubreflist *list, int msize)
+{
+	Resubref *sub;
+	static int count;
+
+	if(list->next == list->subs) {
+		sub = malloc(sizeof(*sub));
+		if(sub == nil)
+			goto Fail;
+		sub->sem = calloc(sizeof(*sub->sem), msize);
+		if(sub->sem == nil)
+			goto Fail;
+	} else
+		sub = *(--list->next);
+	sub->ref = 0;
+	return sub;
+Fail:
+	regerror("Out of memory");
+	return nil;
+}
+
 int
-rregexec(Reprog *prog, Rune *str, Resub *se, int msize)
+rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 {
 	Threadlist lists[2], *clist, *nlist, *tmp;
 	Thread *t;
 	Reinst *curinst;
-	Resublist selist;
+	Resubreflist sublist;
+	Resubref *submatch, **matchp;
 	Rune *rp, last;
 	int match, firstmatch, first;
 	long rstrlen;
@@ -42,14 +85,14 @@ rregexec(Reprog *prog, Rune *str, Resub *se, int msize)
 		}
 		clist->next = clist->threads;
 	}
-	clist = lists;
-	nlist = lists+1;
-	selist.se = calloc(sizeof(*se), (rstrlen + prog->len/2) * msize);
-	if(selist.se == nil) {
+	sublist.subs = calloc(sizeof(*sublist.subs), utflen(prog->regstr));
+	if(sublist.subs == nil) {
 		regerror("Out of memory");
 		return 0;
 	}
-	selist.next = selist.se;
+	sublist.next = sublist.subs;
+	clist = lists;
+	nlist = lists+1;
 
 	match = 0;
 	last = 1;
@@ -62,21 +105,21 @@ Again:
 			switch(curinst->op) {
 			case ORUNE:
 				if(*rp != curinst->r)
-					break;
+					goto Threaddone;
 			case OANY: /* fallthrough */
 				nlist->next->pc = curinst + 1;
-				nlist->next->se = t->se;
+				nlist->next->submatch = t->submatch;
 				nlist->next++;
 				break;
 			case OCLASS:
 				if(*rp < curinst->r)
-					break;
+					goto Threaddone;
 				if(*rp > curinst->r1) {
 					curinst++;
 					goto Again;
 				}
 				nlist->next->pc = curinst->a;
-				nlist->next->se = t->se;
+				nlist->next->submatch = t->submatch;
 				nlist->next++;
 				break;
 			case ONOTNL:
@@ -84,14 +127,13 @@ Again:
 					curinst++;
 					goto Again;
 				}
-				free(t->se);
-				break;
+				goto Threaddone;
 			case OBOL:
 				if(rp == str || *(rp-1) == L'\n') {
 					curinst++;
 					goto Again;
 				}
-				break;
+				goto Threaddone;
 			case OEOL:
 				if(*rp == 0) {
 					curinst++;
@@ -99,46 +141,57 @@ Again:
 				}
 				if(*rp == '\n') {
 					nlist->next->pc = curinst + 1;
-					nlist->next->se = t->se;
+					nlist->next->submatch = t->submatch;
 					nlist->next++;
 				}
-				break;
+				goto Threaddone;
 			case OJMP:
 				curinst = curinst->a;
 				goto Again;
 			case OSPLITSUB:
 				clist->next->pc = curinst->b;
 				if(msize) {
-					clist->next->se = selist.next;
-					selist.next += msize;
+					submatch = popsubref(&sublist, msize);
+					incref(submatch);
+					memcpy(submatch->sem, t->submatch->sem, sizeof(*submatch->sem)*msize);
+					clist->next->submatch = submatch;
 				}
-				memcpy(clist->next->se, t->se, sizeof(Resub)*msize);
 				clist->next++;
 				curinst = curinst->a;
 				goto Again;
 			case OSPLIT:
 				clist->next->pc = curinst->b;
-				clist->next->se = t->se;
+				if(msize) {
+					clist->next->submatch = t->submatch;
+					incref(t->submatch);
+				}
 				clist->next++;
 				curinst = curinst->a;
 				goto Again;
 			case OSAVE:
 				if(curinst->sub < msize)
-					t->se[curinst->sub].rsp = rp;
+					t->submatch->sem[curinst->sub].rsp = rp;
 				curinst++;
 				goto Again;
 			case OUNSAVE:
 				if(curinst->sub < msize)
-					t->se[curinst->sub].rep = rp;
-				/* Earliest match is the left-most longest. */
+					t->submatch->sem[curinst->sub].rep = rp;
+				/* First match is the left-most longest. */
 				if(curinst->sub == 0 && firstmatch) {
 					firstmatch = 0;
 					match = 1;
-					memcpy(se, t->se, sizeof(se)*msize);
-					break;
+					if(msize)
+						memcpy(sem, t->submatch->sem, sizeof(sem)*msize);
+					goto Threaddone;
 				}
 				curinst++;
 				goto Again;
+			Threaddone:
+				if(msize == 0)
+					break;
+				if(decref(t->submatch) == 0)
+					pushsubref(&sublist, t->submatch);
+				break;
 			}
 		}
 		/* Start again once if we haven't found anything. */
@@ -146,8 +199,8 @@ Again:
 			first = 0;
 			t = clist->next++;
 			if(msize) {
-				t->se = selist.next;// = calloc(sizeof(*t->se), msize);
-				selist.next += msize;
+				t->submatch = popsubref(&sublist, msize);
+				incref(t->submatch);
 			}
 			curinst = prog->startinst;
 			goto Again;
@@ -163,6 +216,8 @@ Again:
 
 	for(clist = lists; clist < lists + 2; clist++)
 		free(clist->threads);
-	free(selist.se);
+	for(matchp = sublist.subs; matchp < sublist.next; matchp++)
+		freesubref(*matchp);
+	free(sublist.subs);
 	return match;
 }
