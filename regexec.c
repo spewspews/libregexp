@@ -213,7 +213,7 @@ Again:
 		/* Start again once if we haven't found anything. */
 		if(first == 1 && match == 0) {
 			first = 0;
-			clist->next = clist->threads;;
+			clist->next = clist->threads;
 			t = clist->next++;
 			if(msize) {
 				t->submatch = popsubref(&sublist, msize);
