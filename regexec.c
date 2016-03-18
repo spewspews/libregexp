@@ -78,9 +78,8 @@ regexec(Reprog *prog, char *str, Resub *sem, int msize)
 	long rstrlen;
 
 	if(prog->startinst->gen != 0)
-	for(curinst = prog->startinst; curinst < prog->startinst + prog->len; curinst++) {
+	for(curinst = prog->startinst; curinst < prog->startinst + prog->len; curinst++)
 		curinst->gen = 0;
-	}
 	rstrlen = utflen(str);
 	for(clist = lists; clist < lists + 2; clist++) {
 		clist->threads = calloc(sizeof(*clist->threads), prog->len+rstrlen);
