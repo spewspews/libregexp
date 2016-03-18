@@ -11,8 +11,8 @@ enum
 	ORUNE,
 	ORUNEM,
 	OSAVE,
+	OALT,
 	OSPLIT,
-	OSPLITSUB,
 	OUNSAVE,
 
 	NSUBEXP = 32
@@ -56,6 +56,7 @@ struct Reinst
 		Rune r1;
 		Reinst *b;
 	};
+	int gen;
 };
 
 /*

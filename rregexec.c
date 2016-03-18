@@ -148,7 +148,7 @@ Again:
 			case OJMP:
 				curinst = curinst->a;
 				goto Again;
-			case OSPLITSUB:
+			case OSPLIT:
 				clist->next->pc = curinst->b;
 				if(msize) {
 					submatch = popsubref(&sublist, msize);
@@ -159,7 +159,7 @@ Again:
 				clist->next++;
 				curinst = curinst->a;
 				goto Again;
-			case OSPLIT:
+			case OALT:
 				clist->next->pc = curinst->b;
 				if(msize) {
 					clist->next->submatch = t->submatch;
