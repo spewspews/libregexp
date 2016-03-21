@@ -151,6 +151,7 @@ Again:
 				if(r != curinst->r)
 					goto Threaddone;
 			case OANY: /* fallthrough */
+			case Any:
 				if(curinst[1].gen == gen + 1)
 					goto Threaddone;
 				curinst[1].gen = gen + 1;
@@ -188,15 +189,8 @@ Again:
 					curinst++;
 					goto Again;
 				}
-				if(r == '\n') {
-					if(curinst[1].gen == gen + 1)
-						goto Threaddone;
-					curinst[1].gen = gen + 1;
-					nlist->next->pc = curinst + 1;
-					nlist->next->submatch = t->submatch;
-					nlist->next++;
-					break;
-				}
+				if(r == '\n')
+					goto Any;
 				goto Threaddone;
 			case OJMP:
 				curinst = curinst->a;
