@@ -199,7 +199,7 @@ Tailcall:
 		i->a = compile1(renode->right, reinst->b, sub, nl);
 		return i->a;
 	case TSTAR:
-		reinst->op = OALT;
+		reinst->op = OSPLIT;
 		reinst->a = reinst + 1;
 		i = compile1(renode->left, reinst->a, sub, nl);
 		reinst->b = i + 1;
@@ -209,12 +209,12 @@ Tailcall:
 	case TPLUS:
 		i = reinst;
 		reinst = compile1(renode->left, reinst, sub, nl);
-		reinst->op = OALT;
+		reinst->op = OSPLIT;
 		reinst->a = i;
 		reinst->b = reinst + 1;
 		return reinst->b;
 	case TQUES:
-		reinst->op = OALT;
+		reinst->op = OSPLIT;
 		reinst->a = reinst + 1;
 		reinst->b = compile1(renode->left, reinst->a, sub, nl);
 		return reinst->b;
@@ -538,9 +538,6 @@ prinst(Reinst *inst)
 		break;
 	case OCLASS:
 		print("OCLASS\t%C-%C %p\n", inst->r, inst->r1, inst->a);
-		break;
-	case OALT:
-		print("OALT\t%p %p\n", inst->a, inst->b);
 		break;
 	case OSPLIT:
 		print("OSPLIT\t%p %p\n", inst->a, inst->b);

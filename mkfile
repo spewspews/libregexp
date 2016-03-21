@@ -22,3 +22,6 @@ UPDATE=\
 
 $O.regextest: regextest.$O $LIB
 	$LD -o $target $prereq
+
+$O.sysregextest: sysregextest.$O
+	$LD -o $target $prereq

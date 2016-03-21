@@ -73,9 +73,12 @@ rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 	Resubreflist sublist;
 	Resubref *submatch, **matchp;
 	Rune *rp, last;
-	int match, firstmatch, first;
+	int match, firstmatch, first, gen;
 	long rstrlen;
 
+	if(prog->startinst->gen != 0)
+	for(curinst = prog->startinst; curinst < prog->startinst + prog->len; curinst++)
+		curinst->gen = 0;
 	rstrlen = runestrlen(str);
 	for(clist = lists; clist < lists + 2; clist++) {
 		clist->threads = calloc(sizeof(*clist->threads), prog->len+rstrlen);
@@ -94,9 +97,11 @@ rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 	clist = lists;
 	nlist = lists+1;
 
+	gen = 0;
 	match = 0;
 	last = 1;
 	for(rp = str; last != L'\0'; rp++) {
+		gen++;
 		last = *rp;
 		firstmatch = first = 1;
 		for(t = clist->threads; t < clist->next; t++) {
@@ -107,6 +112,7 @@ Again:
 				if(*rp != curinst->r)
 					goto Threaddone;
 			case OANY: /* fallthrough */
+				(curinst + 1)->gen = gen + 1;
 				nlist->next->pc = curinst + 1;
 				nlist->next->submatch = t->submatch;
 				nlist->next++;
@@ -118,6 +124,7 @@ Again:
 					curinst++;
 					goto Again;
 				}
+				curinst->a->gen = gen + 1;
 				nlist->next->pc = curinst->a;
 				nlist->next->submatch = t->submatch;
 				nlist->next++;
@@ -140,6 +147,7 @@ Again:
 					goto Again;
 				}
 				if(*rp == '\n') {
+					(curinst + 1)->gen = gen + 1;
 					nlist->next->pc = curinst + 1;
 					nlist->next->submatch = t->submatch;
 					nlist->next++;
@@ -149,23 +157,15 @@ Again:
 				curinst = curinst->a;
 				goto Again;
 			case OSPLIT:
-				clist->next->pc = curinst->b;
-				if(msize) {
-					submatch = popsubref(&sublist, msize);
-					incref(submatch);
-					memcpy(submatch->sem, t->submatch->sem, sizeof(*submatch->sem)*msize);
-					clist->next->submatch = submatch;
+				if (curinst->b->gen != gen) {
+					curinst->b->gen = gen;
+					clist->next->pc = curinst->b;
+					if(msize) {
+						clist->next->submatch = t->submatch;
+						incref(t->submatch);
+					}
+					clist->next++;
 				}
-				clist->next++;
-				curinst = curinst->a;
-				goto Again;
-			case OALT:
-				clist->next->pc = curinst->b;
-				if(msize) {
-					clist->next->submatch = t->submatch;
-					incref(t->submatch);
-				}
-				clist->next++;
 				curinst = curinst->a;
 				goto Again;
 			case OSAVE:
@@ -197,12 +197,14 @@ Again:
 		/* Start again once if we haven't found anything. */
 		if(first == 1 && match == 0) {
 			first = 0;
+			clist->next = clist->threads;
 			t = clist->next++;
 			if(msize) {
 				t->submatch = popsubref(&sublist, msize);
 				incref(t->submatch);
 			}
 			curinst = prog->startinst;
+			curinst->gen = gen;
 			goto Again;
 		}
 		/* If we have a match and no extant threads, we are done. */

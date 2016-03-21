@@ -11,7 +11,6 @@ enum
 	ORUNE,
 	ORUNEM,
 	OSAVE,
-	OALT,
 	OSPLIT,
 	OUNSAVE,
 
