@@ -151,7 +151,6 @@ Again:
 				if(r != curinst->r)
 					goto Threaddone;
 			case OANY: /* fallthrough */
-				curinst->gen = gen;
 				if(curinst[1].gen == gen + 1)
 					goto Threaddone;
 				curinst[1].gen = gen + 1;
@@ -165,7 +164,6 @@ Again:
 					goto Threaddone;
 				if(r > curinst->r1) {
 					curinst++;
-					curinst->gen = gen;
 					goto Class;
 				}
 				curinst->a->gen = gen + 1;
@@ -176,33 +174,32 @@ Again:
 			case ONOTNL:
 				if(r != L'\n') {
 					curinst++;
-					curinst->gen = gen;
 					goto Again;
 				}
 				goto Threaddone;
 			case OBOL:
 				if(sp == str || *(sp-1) == '\n') {
 					curinst++;
-					curinst->gen = gen;
 					goto Again;
 				}
 				goto Threaddone;
 			case OEOL:
 				if(r == 0) {
 					curinst++;
-					curinst->gen = gen;
 					goto Again;
 				}
 				if(r == '\n') {
+					if(curinst[1].gen == gen + 1)
+						goto Threaddone;
 					curinst[1].gen = gen + 1;
 					nlist->next->pc = curinst + 1;
 					nlist->next->submatch = t->submatch;
 					nlist->next++;
+					break;
 				}
 				goto Threaddone;
 			case OJMP:
 				curinst = curinst->a;
-				curinst->gen = gen;
 				goto Again;
 			case OSPLIT:
 				if(curinst->b->gen != gen) {
@@ -215,12 +212,10 @@ Again:
 					clist->next++;
 				}
 				curinst = curinst->a;
-				curinst->gen = gen;
 				goto Again;
 			case OSAVE:
 				savesub(t, curinst, sp, &sublist, msize, 0);
 				curinst++;
-				curinst->gen = gen;
 				goto Again;
 			case OUNSAVE:
 				/* First match is the left-most longest. */
@@ -237,7 +232,6 @@ Again:
 				}
 				savesub(t, curinst, sp, &sublist, msize, 1);
 				curinst++;
-				curinst->gen = gen;
 				goto Again;
 			Threaddone:
 				if(msize == 0)
@@ -249,7 +243,7 @@ Again:
 		}
 //		print("Clist threads: %lld\n", clist->next - clist->threads);
 //		for(t = clist->threads; t < clist->next; t++)
-//			print("thread instruction: %p\n", t->pc);
+//			print("thread instruction: %p %d\n", t->pc, t->pc->gen);
 		/* Start again once if we haven't found anything. */
 		if(first == 1 && match == 0) {
 			first = 0;
@@ -260,7 +254,6 @@ Again:
 				incref(t->submatch);
 			}
 			curinst = prog->startinst;
-			curinst->gen = gen;
 			goto Again;
 		}
 		/* If we have a match and no extant threads, we are done. */
@@ -271,6 +264,7 @@ Again:
 		nlist = tmp;
 		nlist->next = nlist->threads;
 	}
+	prog->startinst->gen = gen;
 
 	for(clist = lists; clist < lists + 2; clist++)
 		free(clist->threads);
