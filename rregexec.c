@@ -53,8 +53,6 @@ static void
 pushsubmatch(Submatchlist *list, Submatch *sub)
 {
 //	print("Pushing %p\n", sub);
-	if(sub == nil)
-		return;
 	*list->next++ = sub;
 }
 
