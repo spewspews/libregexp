@@ -74,33 +74,33 @@ main(int argc, char **argv)
 		print("no match\n");
 
 
-//
-//	print("\nRUNES\n");
-//	slen = strlen(matchstr);
-//	runestr = calloc(sizeof(*runestr), slen+1);
-//	str2runes(runestr, slen+1, matchstr);
-//	match = rregexec(reprog, runestr, resub, nelem(resub));
-//	if(match) {
-//		for(i = 0; i < nelem(resub); i++) {
-//			subp = resub+i;
-//			if(subp->rep == nil)
-//				continue;
-//			print("Match %d: ", i);
-//			r = *subp->rep;
-//			*subp->rep = '\0';
-//			print("%S\n", subp->rsp);
-//			*subp->rep = r;
-//		}
-//		rregsub(L"| & | \\1 | \\2 | \\3 |", runesub, nelem(runesub), resub, nelem(resub));
-//		print("\nSubstitution string:\n");
-//		print("%S\n", runesub);
-//	} else
-//		print("no match\n");
-//	print("\nNO SUBS MATCH\n");
-//	match = rregexec(reprog, runestr, nil, 0);
-//	if(match)
-//		print("yes match\n");
-//	else
-//		print("no match\n");
+
+	print("\nRUNES\n");
+	slen = strlen(matchstr);
+	runestr = calloc(sizeof(*runestr), slen+1);
+	str2runes(runestr, slen+1, matchstr);
+	match = rregexec(reprog, runestr, resub, nelem(resub));
+	if(match) {
+		for(i = 0; i < nelem(resub); i++) {
+			subp = resub+i;
+			if(subp->rep == nil)
+				continue;
+			print("Match %d: ", i);
+			r = *subp->rep;
+			*subp->rep = '\0';
+			print("%S\n", subp->rsp);
+			*subp->rep = r;
+		}
+		rregsub(L"| & | \\1 | \\2 | \\3 |", runesub, nelem(runesub), resub, nelem(resub));
+		print("\nSubstitution string:\n");
+		print("%S\n", runesub);
+	} else
+		print("no match\n");
+	print("\nNO SUBS MATCH\n");
+	match = rregexec(reprog, runestr, nil, 0);
+	if(match)
+		print("yes match\n");
+	else
+		print("no match\n");
 	exits(0);
 }

@@ -102,7 +102,7 @@ int
 regexec(Reprog *prog, char *str, Resub *sem, int msize)
 {
 	Threadlist lists[2], *clist, *nlist, *tmp;
-	Thread *t;
+	Thread *t, *s;
 	Reinst *curinst;
 	Submatchlist sublist;
 	Submatch **matchp, *startmatch;
@@ -146,12 +146,13 @@ regexec(Reprog *prog, char *str, Resub *sem, int msize)
 		for(t = clist->threads; t < clist->next; t++) {
 			curinst = t->pc;
 Again:
+//			print("thread: %p, %p, %d\n", t, curinst, curinst->gen);
 			switch(curinst->op) {
 			case ORUNE:
 				if(r != curinst->r)
 					goto Threaddone;
 			case OANY: /* fallthrough */
-			case Any:
+			Any:
 				if(curinst[1].gen == gen + 1)
 					goto Threaddone;
 				curinst[1].gen = gen + 1;
@@ -179,7 +180,7 @@ Again:
 				}
 				goto Threaddone;
 			case OBOL:
-				if(sp == str || *(sp-1) == '\n') {
+				if(sp == str || sp[-1] == '\n') {
 					curinst++;
 					goto Again;
 				}
@@ -197,13 +198,21 @@ Again:
 				goto Again;
 			case OSPLIT:
 				if(curinst->b->gen != gen) {
-					curinst->b->gen = gen;
 					clist->next->pc = curinst->b;
 					if(msize) {
 						clist->next->submatch = t->submatch;
 						incref(t->submatch);
 					}
 					clist->next++;
+				} else if(msize) {
+					for(s = t + 1; s < clist->next; s++) {
+						if(s->pc == curinst->b)
+							break;
+					}
+					incref(t->submatch);
+					if(decref(s->submatch) == 0 && s->submatch != startmatch)
+						pushsubmatch(&sublist, s->submatch);
+					s->submatch = t->submatch;
 				}
 				curinst = curinst->a;
 				goto Again;
@@ -247,6 +256,8 @@ Again:
 				t->submatch = startmatch;
 				incref(t->submatch);
 			}
+//			print("Start again\n");
+//			t->pc = prog->startinst;
 			curinst = prog->startinst;
 			goto Again;
 		}
