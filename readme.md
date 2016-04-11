@@ -9,23 +9,27 @@ It implements the regular expressions documented in plan 9's regexp(6)
 by executing bytecode on a virtual machine. It is a drop-in replacement
 for Plan 9's libregexp with the following key differences:
 
-(1) It is faster.
+#### It is faster. ####
   For typical regular expressions, this implementation is
   typically 2.6 to 3 times faster than the system
   implementation.  For abnormal regular expressions--something
   like `a?a?a?a?a?a?a?`--I have observed this implementation to
   be 55 times faster.
-(2) It is correct.
+#### It is correct. ####
   The system implementation will fail to capture sub-matches for
   certain regular expressions--typically abnormal ones.  The
   rune implementation fails faster than the character based one.
   This implementation will always capture sub-matches.
-(3) It is a smaller implementation.
+#### It is a smaller implementation. ####
   The system implementation's wc is:
+  ```
     1395    3919   27249 total
+  ```
   This implementation's wc is:
-    1269    3052   21597 total
-(4) It is thread-safe/re-entrant.
+  ```
+   1202    2926   20652 total
+  ```
+#### It is thread-safe/re-entrant. ####
   The system implementation references external variables during
   compilation (the execution system is thread-safe).  This
   implementation is fully thread-safe at all times.
@@ -39,6 +43,7 @@ your own comparison, the tests directory contains two programs to
 compare this implementation to the system's implementation.  Usage of
 those is:
 
+```
 regextest -lnp -r reps -c creps -m nsubm regex matchstr
 usage:
   reps is the number of times to run regex against the matchstr (default 1).
@@ -47,6 +52,7 @@ usage:
   -l is to compile a literal regular expression.
   -n is to compile a regular expression where . does not match '\n'.
   -p is to print the compiled regular expression.
+```
 
 sysregextest uses the system implementation.
 
