@@ -1,284 +1,175 @@
 #include <u.h>
 #include <libc.h>
-#include "regex.h"
+#include <newregexp.h>
+#include "regimpl.h"
 
-typedef struct Thread Thread;
-typedef struct Threadlist Threadlist;
-typedef struct Submatch Submatch;
-typedef struct Submatchlist Submatchlist;
-
-struct Thread
+typedef struct RethreadQ RethreadQ;
+struct RethreadQ
 {
-	Reinst *pc;
-	Submatch *submatch;
+	Rethread *head;
+	Rethread **tail;
 };
-struct Threadlist
-{
-	Thread *threads;
-	Thread *next;
-};
-struct Submatch
-{
-	long ref;
-	Resub *sem;
-};
-struct Submatchlist
-{
-	Submatch **subs;
-	Submatch **next;
-};
-
-static void
-incref(Submatch *sm)
-{
-	sm->ref++;
-}
-
-static long
-decref(Submatch *sm)
-{
-	if(sm->ref == 0)
-		return 0;
-	return --sm->ref;
-}
-
-static void
-freesubmatch(Submatch *submatch)
-{
-	free(submatch->sem);
-	free(submatch);
-}
-
-static void
-pushsubmatch(Submatchlist *list, Submatch *sub)
-{
-//	print("Pushing %p\n", sub);
-	*list->next++ = sub;
-}
-
-static Submatch*
-popsubmatch(Submatchlist *list, int msize)
-{
-	Submatch *sub;
-
-	if(list->next == list->subs) {
-		sub = malloc(sizeof(*sub));
-		if(sub == nil)
-			goto Fail;
-		sub->sem = calloc(sizeof(*sub->sem), msize);
-		if(sub->sem == nil)
-			goto Fail;
-	} else
-		sub = *(--list->next);
-	sub->ref = 0;
-//	print("Popping %p\n", sub);
-	return sub;
-Fail:
-	regerror("Out of memory");
-	return nil;
-}
-
-static void
-savesub(Thread *t, Reinst *curinst, Rune *rp, Submatchlist *sublist, int msize, int unsave)
-{
-	Submatch *submatch;
-
-	if(curinst->sub < msize) {
-		if(t->submatch->ref > 1) {
-			submatch = popsubmatch(sublist, msize);
-			memcpy(submatch->sem, t->submatch->sem, sizeof(*submatch->sem)*msize);
-			incref(submatch);
-			decref(t->submatch);
-			t->submatch = submatch;
-		}
-		if(unsave)
-			t->submatch->sem[curinst->sub].rep = rp;
-		else
-			t->submatch->sem[curinst->sub].rsp = rp;
-	}
-}
 
 int
 rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 {
-	Threadlist lists[2], *clist, *nlist, *tmp;
-	Thread *t, *s;
+	RethreadQ lists[2], *clist, *nlist, *tmp;
+	Rethread *t, *next, **availthr;
 	Reinst *curinst;
-	Submatchlist sublist;
-	Submatch **matchp, *startmatch;
 	Rune *rp, last;
-	int match, firstmatch, first, gen;
+	int i, match, firstmatch, first, gen;
 
-	if(prog->startinst->gen != 0)
-	for(curinst = prog->startinst; curinst < prog->startinst + prog->len; curinst++)
-		curinst->gen = 0;
-	for(clist = lists; clist < lists + 2; clist++) {
-		clist->threads = calloc(sizeof(*clist->threads), prog->len+1);
-		if(clist->threads == nil) {
-			regerror("Out of memory");
-			return 0;
-		}
-		clist->next = clist->threads;
+	if(msize > NSUBEXPM)
+		msize = NSUBEXPM;
+
+	if(prog->startinst->gen != 0) {
+		for(curinst = prog->startinst; curinst < prog->startinst + prog->len; curinst++)
+			curinst->gen = 0;
 	}
-	if(msize) {
-		sublist.subs = calloc(sizeof(*sublist.subs), runestrlen(str)+1);
-		if(sublist.subs == nil) {
-			regerror("Out of memory");
-			return 0;
-		}
-		sublist.next = sublist.subs;
-	}
+
 	clist = lists;
-	nlist = lists+1;
+	clist->head = nil;
+	clist->tail = &clist->head;
+	nlist = lists + 1;
+	nlist->head = nil;
+	nlist->tail = &nlist->head;
+
+	for(i = 0; i < prog->nthr; i++)
+		prog->thrpool[i] = prog->threads + i;
+	availthr = prog->thrpool + prog->nthr;
 
 	gen = 0;
 	match = 0;
-	if(msize)
-		startmatch = popsubmatch(&sublist, msize);
-	else
-		startmatch = nil;
 	last = 1;
 	for(rp = str; last != L'\0'; rp++) {
 		gen++;
 		last = *rp;
-		firstmatch = first = 1;
-		for(t = clist->threads; t < clist->next; t++) {
-			curinst = t->pc;
+		first = firstmatch = 1;
+		t = clist->head;
+		if(t == nil)
+			goto Next;
+		curinst = t->pc;
 Again:
-//			print("thread: %p, %p, %d\n", t, curinst, curinst->gen);
+		for(;;) {
+			if(curinst->gen == gen)
+				goto Done;
+			curinst->gen = gen;
 			switch(curinst->op) {
 			case ORUNE:
 				if(*rp != curinst->r)
-					goto Threaddone;
+					goto Done;
 			case OANY: /* fallthrough */
 			Any:
-				if(curinst[1].gen == gen + 1)
-					goto Threaddone;
-				curinst[1].gen = gen + 1;
-				nlist->next->pc = curinst + 1;
-				nlist->next->submatch = t->submatch;
-				nlist->next++;
+				next = t->next;
+				t->pc = curinst + 1;
+				t->next = nil;
+				*nlist->tail = t;
+				nlist->tail = &t->next;
+				t = next;
+				if(t == nil)
+					goto Next;
+				curinst = t->pc;
 				break;
 			case OCLASS:
 			Class:
-				if(curinst->a->gen == gen + 1 || *rp < curinst->r)
-					goto Threaddone;
+				if(*rp < curinst->r)
+					goto Done;
 				if(*rp > curinst->r1) {
 					curinst++;
 					goto Class;
 				}
-				curinst->a->gen = gen + 1;
-				nlist->next->pc = curinst->a;
-				nlist->next->submatch = t->submatch;
-				nlist->next++;
+				next = t->next;
+				t->pc = curinst->a;
+				t->next = nil;
+				*nlist->tail = t;
+				nlist->tail = &t->next;
+				t = next;
+				if(t == nil)
+					goto Next;
+				curinst = t->pc;
 				break;
 			case ONOTNL:
 				if(*rp != L'\n') {
 					curinst++;
-					goto Again;
+					break;
 				}
-				goto Threaddone;
+				goto Done;
 			case OBOL:
 				if(rp == str || rp[-1] == '\n') {
 					curinst++;
-					goto Again;
+					break;
 				}
-				goto Threaddone;
+				goto Done;
 			case OEOL:
 				if(*rp == 0) {
 					curinst++;
-					goto Again;
+					break;
 				}
 				if(*rp == '\n')
 					goto Any;
-				goto Threaddone;
+				goto Done;
 			case OJMP:
 				curinst = curinst->a;
-				goto Again;
+				break;
 			case OSPLIT:
-				if(curinst->b->gen != gen) {
-					clist->next->pc = curinst->b;
-					if(msize) {
-						clist->next->submatch = t->submatch;
-						incref(t->submatch);
-					}
-					clist->next++;
-				} else if(msize) {
-					for(s = t + 1; s < clist->next; s++) {
-						if(s->pc == curinst->b)
-							break;
-					}
-					incref(t->submatch);
-					if(decref(s->submatch) == 0 && s->submatch != startmatch)
-						pushsubmatch(&sublist, s->submatch);
-					s->submatch = t->submatch;
+				if(availthr > prog->thrpool) {
+					availthr--;
+					(*availthr)->next = t->next;
+					t->next = *availthr;
+					t->next->pc = curinst->b;
+					if(msize)
+						memcpy(t->next->sem, t->sem, sizeof(Resub)*msize);
 				}
 				curinst = curinst->a;
-				goto Again;
+				break;
 			case OSAVE:
-				savesub(t, curinst, rp, &sublist, msize, 0);
+				t->sem[curinst->sub].rsp = rp;
 				curinst++;
-				goto Again;
+				break;
 			case OUNSAVE:
 				/* First match is the left-most longest. */
 				if(curinst->sub == 0) {
 					if (!firstmatch)
-						goto Threaddone;
+						goto Done;
 					firstmatch = 0;
 					match = 1;
 					if(msize) {
-						memcpy(sem, t->submatch->sem, sizeof(*sem)*msize);
-						sem[curinst->sub].rep = rp;
+						memcpy(sem, t->sem, sizeof(Resub)*msize);
+						sem->rep = rp;
 					}
-					goto Threaddone;
+					goto Done;
 				}
-				savesub(t, curinst, rp, &sublist, msize, 1);
+				t->sem[curinst->sub].rep = rp;
 				curinst++;
-				goto Again;
-			Threaddone:
-				if(msize == 0)
-					break;
-				if(decref(t->submatch) == 0 && t->submatch != startmatch)
-					pushsubmatch(&sublist, t->submatch);
+				break;
+			Done:
+				*availthr++ = t;
+				t = t->next;
+				if(t == nil)
+					goto Next;
+				curinst = t->pc;
 				break;
 			}
 		}
-//		print("Clist threads: %lld\n", clist->next - clist->threads);
-//		for(t = clist->threads; t < clist->next; t++)
-//			print("thread instruction: %p %d\n", t->pc, t->pc->gen);
+Next:
 		/* Start again once if we haven't found anything. */
 		if(first == 1 && match == 0) {
 			first = 0;
-			clist->next = clist->threads;
-			t = clist->next++;
-			if(msize) {
-				t->submatch = startmatch;
-				incref(t->submatch);
-			}
-//			print("Start again\n");
-//			t->pc = prog->startinst;
+			t = *--availthr;
+			t->next = nil;
+			if(msize)
+				memset(t->sem, 0, sizeof(Resub)*msize);
 			curinst = prog->startinst;
 			goto Again;
 		}
 		/* If we have a match and no extant threads, we are done. */
-		if(match == 1 && nlist->next == nlist->threads)
+		if(match == 1 && nlist->head == nil)
 			break;
 		tmp = clist;
 		clist = nlist;
 		nlist = tmp;
-		nlist->next = nlist->threads;
+		nlist->head = nil;
+		nlist->tail = &nlist->head;
 	}
-	prog->startinst->gen = gen;
-
-	for(clist = lists; clist < lists + 2; clist++)
-		free(clist->threads);
-	if(msize) {
-//		print("submatches allocated: %lld\n", sublist.next - sublist.subs + 1);
-		for(matchp = sublist.subs; matchp < sublist.next; matchp++)
-			freesubmatch(*matchp);
-		freesubmatch(startmatch);
-		free(sublist.subs);
-	}
-
 	return match;
 }

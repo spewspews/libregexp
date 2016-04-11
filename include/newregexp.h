@@ -1,5 +1,5 @@
-#pragma src "/usr/ben/src/libregex"
-#pragma lib "libregex.a"
+#pragma src "/sys/src/newlibregexp"
+#pragma lib "newlibregexp.a"
 enum
 {
 	OANY = 0,
@@ -9,21 +9,19 @@ enum
 	OJMP,
 	ONOTNL,
 	ORUNE,
-	ORUNEM,
 	OSAVE,
 	OSPLIT,
 	OUNSAVE,
-
-	NSUBEXP = 32
 };
 
 typedef struct Resub Resub;
 typedef struct Reinst Reinst;
 typedef struct Reprog Reprog;
+typedef struct Rethread Rethread;
 
-/*
- * Sub expression matches
- */
+#pragma incomplete Reinst
+#pragma incomplete Rethread
+
 struct Resub
 {
 	union
@@ -37,35 +35,14 @@ struct Resub
 		Rune *rep;
 	};
 };
-
-/*
- * Machine instructions
- */
-struct Reinst
-{
-	char op;
-	Reinst *a;
-	union
-	{
-		Rune r;
-		int sub;
-	};
-	union
-	{
-		Rune r1;
-		Reinst *b;
-	};
-	int gen;
-};
-
-/*
- * Reprogram definition
- */
 struct Reprog
 {
 	Reinst *startinst; /* start pc */
+	Rethread *threads;
+	Rethread **thrpool;
 	char *regstr;
 	int len;
+	int nthr;
 };
 
 Reprog *regcomp(char*);
@@ -76,3 +53,4 @@ int regexec(Reprog*, char*, Resub*, int);
 void regsub(char*, char*, int, Resub*, int);
 int rregexec(Reprog*, Rune*, Resub*, int);
 void rregsub(Rune*, Rune*, int, Resub*, int);
+int reprogfmt(Fmt*);

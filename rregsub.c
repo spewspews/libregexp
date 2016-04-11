@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include "regex.h"
+#include <newregexp.h>
 
 void
 rregsub(Rune *src, Rune *dst, int dlen, Resub *match, int msize)

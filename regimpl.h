@@ -22,7 +22,9 @@ enum
 	TQUES,
 	TRUNE,
 	TSTAR,
-	TSUB
+	TSUB,
+
+	NSUBEXPM = 32
 };
 
 typedef struct Parselex Parselex;
@@ -31,9 +33,10 @@ typedef struct Renode Renode;
 struct Parselex
 {
 	/* Parse */
-	Renode *freep;
+	Renode *next;
 	Renode *nodes;
 	int sub;
+	int instrs;
 	void (*getnextr)(Parselex*);
 	/* Lex */
 	char *rawexp;
@@ -59,6 +62,28 @@ struct Renode
 	};
 	int nclass;
 };
+struct Rethread
+{
+	Reinst *pc;
+	Resub sem[NSUBEXPM];
+	Rethread *next;
+};
+struct Reinst
+{
+	char op;
+	int gen;
+	Reinst *a;
+	union
+	{
+		Rune r;
+		int sub;
+	};
+	union
+	{
+		Rune r1;
+		Reinst *b;
+	};
+};
 
 static int lex(Parselex*);
 static void getnextr(Parselex*);
@@ -75,5 +100,3 @@ static Reprog *regcomp1(char*, int, int);
 static Reinst *compile(Renode*, Reprog*, int);
 static Reinst *compile1(Renode*, Reinst*, int*, int);
 static void prtree(Renode*, int, int);
-static void prprog(Reprog*);
-static void prinst(Reinst*);

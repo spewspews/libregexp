@@ -1,6 +1,6 @@
 </$objtype/mkfile
 
-LIB=/$objtype/lib/libregex.a
+LIB=/$objtype/lib/newlibregexp.a
 OFILES=\
 	regcomp.$O\
 	regerror.$O\
@@ -8,6 +8,7 @@ OFILES=\
 	regsub.$O\
 	rregexec.$O\
 	rregsub.$O\
+	regprint.$O\
 
 HFILES=\
 	regex.h\
@@ -20,8 +21,8 @@ UPDATE=\
 
 </sys/src/cmd/mksyslib
 
-$O.regextest: regextest.$O $LIB
-	$LD -o $target $prereq
+$O.regextest: tests/regextest.$O $LIB
+	$LD -o $target regextest.$O
 
-$O.sysregextest: sysregextest.$O
-	$LD -o $target $prereq
+$O.sysregextest: tests/sysregextest.$O
+	$LD -o $target sysregextest.$O

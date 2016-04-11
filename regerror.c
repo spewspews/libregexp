@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include "regexp.h"
+#include <newregexp.h>
 
 void
 regerror(char *s)

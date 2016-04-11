@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include "regex.h"
+#include <newregexp.h>
 
 void
 regsub(char *src, char *dst, int dlen, Resub *match, int msize)
@@ -23,7 +23,7 @@ regsub(char *src, char *dst, int dlen, Resub *match, int msize)
 		case '8':
 		case '9':
 			i = *src - '0';
-			if(match != nil && i < msize && match[i].sp != nil) {
+			if(match != nil && i < msize && match[i].ep != nil) {
 				c = *match[i].ep;
 				*match[i].ep = '\0';
 				dst = strecpy(dst, ep+1, match[i].sp);
