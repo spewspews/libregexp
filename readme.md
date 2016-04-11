@@ -3,7 +3,7 @@ Another Regular Expression Library
 
 This is a regular expression implementation. It draws on
 RSC's regular expression [exposition](https://swtch.com/~rsc/regexp/)
-Ken Thompson's grep from Plan 9.
+and Ken Thompson's grep from Plan 9.
 
 It implements the regular expressions documented in plan 9's regexp(6)
 by executing bytecode on a virtual machine. It is a drop-in replacement
