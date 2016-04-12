@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include <newregexp.h>
+#include <regexp.h>
 #include <regimpl.h>
 
 static int

@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include <newregexp.h>
+#include <regexp.h>
 #include "regimpl.h"
 
 int instrcnt[] = {
@@ -168,6 +168,7 @@ regcomp1(char *regstr, int nl, int lit)
 	plex.next = plex.nodes;
 	parsetr = node(&plex, TSUB, e0(&plex), nil);
 
+//	prtree(parsetr);
 	reprog = malloc(sizeof(Reprog) +
 	                sizeof(Reinst) * plex.instrs +
 	                sizeof(Rethread) * regstrlen +
@@ -300,7 +301,7 @@ getnextr(Parselex *l)
 		return;
 	}
 	l->rawexp += chartorune(&l->rune, l->rawexp);
-	if(*l->rawexp == L'\\') {
+	if(l->rune == L'\\') {
 		l->rawexp += chartorune(&l->rune, l->rawexp);
 		l->literal = 1;
 	}

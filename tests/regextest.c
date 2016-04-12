@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include <newregexp.h>
+#include <regexp.h>
 
 #pragma varargck type "R" Reprog*
 
@@ -103,6 +103,7 @@ main(int argc, char **argv)
 	slen = strlen(matchstr);
 	runestr = calloc(sizeof(*runestr), slen+1);
 	str2runes(runestr, slen+1, matchstr);
+	memset(resub, 0, sizeof(*resub)*nsubm);
 	for(i = 0; i < reps; i++)
 		match = rregexec(reprog, runestr, resub, nsubm);
 

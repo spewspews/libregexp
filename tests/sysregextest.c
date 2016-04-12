@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include <regexp.h>
+#include <oldregexp.h>
 
 void
 str2runes(Rune *dst, int dlen, char *src)

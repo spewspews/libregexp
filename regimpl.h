@@ -66,6 +66,7 @@ struct Rethread
 {
 	Reinst *pc;
 	Resub sem[NSUBEXPM];
+	int pri;
 	Rethread *next;
 };
 struct Reinst

@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include <newregexp.h>
+#include <regexp.h>
 
 void
 regsub(char *src, char *dst, int dlen, Resub *match, int msize)

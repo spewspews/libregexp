@@ -1,6 +1,6 @@
 </$objtype/mkfile
 
-LIB=/$objtype/lib/newlibregexp.a
+LIB=/$objtype/lib/libregexp.a
 OFILES=\
 	regcomp.$O\
 	regerror.$O\
@@ -10,8 +10,8 @@ OFILES=\
 	rregsub.$O\
 	regprint.$O\
 
-HFILES=\
-	regex.h\
+HFILES=/sys/include/regexp.h\
+	regimpl.h\
 
 UPDATE=\
 	mkfile\

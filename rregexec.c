@@ -1,6 +1,6 @@
 #include <u.h>
 #include <libc.h>
-#include <newregexp.h>
+#include <regexp.h>
 #include "regimpl.h"
 
 typedef struct RethreadQ RethreadQ;
@@ -14,10 +14,10 @@ int
 rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 {
 	RethreadQ lists[2], *clist, *nlist, *tmp;
-	Rethread *t, *next, **availthr;
+	Rethread *t, *nextthr, **availthr;
 	Reinst *curinst;
-	Rune *rp, last;
-	int i, match, firstmatch, first, gen;
+	Rune *rsp, *rep, endr, last;
+	int i, match, first, gen, pri, matchpri;
 
 	if(msize > NSUBEXPM)
 		msize = NSUBEXPM;
@@ -38,125 +38,136 @@ rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 		prog->thrpool[i] = prog->threads + i;
 	availthr = prog->thrpool + prog->nthr;
 
-	gen = 0;
-	match = 0;
+	pri = matchpri = gen = match = 0;
+	rsp = str;
+	rep = nil;
+	endr = L'\0';
+	if(sem != nil && msize){
+		if(sem->rsp != nil) {
+			rsp = sem->rsp;
+		}
+		if(sem->rep != nil && *sem->rep != L'\0') {
+			rep = sem->rep;
+			endr = *sem->rep;
+			*sem->rep = '\0';
+		}
+	}
 	last = 1;
-	for(rp = str; last != L'\0'; rp++) {
+	for(; last != L'\0'; rsp++) {
 		gen++;
-		last = *rp;
-		first = firstmatch = 1;
+		last = *rsp;
+		first = 1;
 		t = clist->head;
 		if(t == nil)
-			goto Next;
+			goto Start;
 		curinst = t->pc;
 Again:
-		for(;;) {
-			if(curinst->gen == gen)
+		if(curinst->gen == gen)
+			goto Done;
+		curinst->gen = gen;
+		switch(curinst->op) {
+		case ORUNE:
+			if(*rsp != curinst->r)
 				goto Done;
-			curinst->gen = gen;
-			switch(curinst->op) {
-			case ORUNE:
-				if(*rp != curinst->r)
-					goto Done;
-			case OANY: /* fallthrough */
-			Any:
-				next = t->next;
-				t->pc = curinst + 1;
-				t->next = nil;
-				*nlist->tail = t;
-				nlist->tail = &t->next;
-				t = next;
-				if(t == nil)
-					goto Next;
-				curinst = t->pc;
+		case OANY: /* fallthrough */
+		Any:
+			nextthr = t->next;
+			t->pc = curinst + 1;
+			t->next = nil;
+			*nlist->tail = t;
+			nlist->tail = &t->next;
+			if(nextthr == nil)
 				break;
-			case OCLASS:
-			Class:
-				if(*rp < curinst->r)
-					goto Done;
-				if(*rp > curinst->r1) {
-					curinst++;
-					goto Class;
-				}
-				next = t->next;
-				t->pc = curinst->a;
-				t->next = nil;
-				*nlist->tail = t;
-				nlist->tail = &t->next;
-				t = next;
-				if(t == nil)
-					goto Next;
-				curinst = t->pc;
-				break;
-			case ONOTNL:
-				if(*rp != L'\n') {
-					curinst++;
-					break;
-				}
+			t = nextthr;
+			curinst = t->pc;
+			goto Again;
+		case OCLASS:
+		Class:
+			if(*rsp < curinst->r)
 				goto Done;
-			case OBOL:
-				if(rp == str || rp[-1] == '\n') {
-					curinst++;
-					break;
-				}
-				goto Done;
-			case OEOL:
-				if(*rp == 0) {
-					curinst++;
-					break;
-				}
-				if(*rp == '\n')
-					goto Any;
-				goto Done;
-			case OJMP:
-				curinst = curinst->a;
-				break;
-			case OSPLIT:
-				if(availthr > prog->thrpool) {
-					availthr--;
-					(*availthr)->next = t->next;
-					t->next = *availthr;
-					t->next->pc = curinst->b;
-					if(msize)
-						memcpy(t->next->sem, t->sem, sizeof(Resub)*msize);
-				}
-				curinst = curinst->a;
-				break;
-			case OSAVE:
-				t->sem[curinst->sub].rsp = rp;
+			if(*rsp > curinst->r1) {
 				curinst++;
-				break;
-			case OUNSAVE:
-				/* First match is the left-most longest. */
-				if(curinst->sub == 0) {
-					if (!firstmatch)
-						goto Done;
-					firstmatch = 0;
-					match = 1;
-					if(msize) {
-						memcpy(sem, t->sem, sizeof(Resub)*msize);
-						sem->rep = rp;
-					}
-					goto Done;
-				}
-				t->sem[curinst->sub].rep = rp;
-				curinst++;
-				break;
-			Done:
-				*availthr++ = t;
-				t = t->next;
-				if(t == nil)
-					goto Next;
-				curinst = t->pc;
-				break;
+				goto Class;
 			}
+			nextthr = t->next;
+			t->pc = curinst->a;
+			t->next = nil;
+			*nlist->tail = t;
+			nlist->tail = &t->next;
+			if(nextthr == nil)
+				break;
+			t = nextthr;
+			curinst = t->pc;
+			goto Again;
+		case ONOTNL:
+			if(*rsp != L'\n') {
+				curinst++;
+				goto Again;
+			}
+			goto Done;
+		case OBOL:
+			if(rsp == str || rsp[-1] == '\n') {
+				curinst++;
+				goto Again;
+			}
+			goto Done;
+		case OEOL:
+			if(*rsp == L'\0' && rep == nil) {
+				curinst++;
+				goto Again;
+			}
+			if(*rsp == '\n')
+				goto Any;
+			goto Done;
+		case OJMP:
+			curinst = curinst->a;
+			goto Again;
+		case OSPLIT:
+			nextthr = *--availthr;
+			nextthr->next = t->next;
+			nextthr->pc = curinst->b;
+			if(msize)
+				memcpy(nextthr->sem, t->sem, sizeof(Resub)*msize);
+			nextthr->pri = t->pri;
+			t->next = nextthr;
+			curinst = curinst->a;
+			goto Again;
+		case OSAVE:
+			t->sem[curinst->sub].rsp = rsp;
+			curinst++;
+			goto Again;
+		case OUNSAVE:
+			if(curinst->sub == 0) {
+				/* "Highest" priority is the left-most longest. */
+				if (t->pri > matchpri)
+					goto Done;
+				match = 1;
+				matchpri = t->pri;
+				if(msize) {
+					memcpy(sem, t->sem, sizeof(Resub)*msize);
+					sem->rep = rsp;
+				}
+				goto Done;
+			}
+			t->sem[curinst->sub].rep = rsp;
+			curinst++;
+			goto Again;
+		Done:
+			*availthr++ = t;
+			t = t->next;
+			if(t == nil)
+				break;
+			curinst = t->pc;
+			goto Again;
 		}
-Next:
+Start:
 		/* Start again once if we haven't found anything. */
 		if(first == 1 && match == 0) {
 			first = 0;
 			t = *--availthr;
 			t->next = nil;
+			/* "Lower" priority thread */
+			t->pri = matchpri = pri++;
 			if(msize)
 				memset(t->sem, 0, sizeof(Resub)*msize);
 			curinst = prog->startinst;
@@ -171,5 +182,7 @@ Next:
 		nlist->head = nil;
 		nlist->tail = &nlist->head;
 	}
+	if(rep != nil)
+		*rep = endr;
 	return match;
 }
