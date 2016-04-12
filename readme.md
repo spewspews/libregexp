@@ -7,7 +7,8 @@ and Ken Thompson's grep from Plan 9.
 
 It implements the regular expressions documented in plan 9's regexp(6)
 by executing bytecode on a virtual machine. It is a drop-in replacement
-for Plan 9's libregexp with the following key differences:
+for Plan 9's [libregexp](https://code.9front.org/hg/plan9front/file/bacc4e61fa99/sys/src/libregexp)
+with the following key differences:
 
 #### It is faster. ####
   For typical regular expressions, this implementation is
