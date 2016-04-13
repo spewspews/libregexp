@@ -42,10 +42,9 @@ rregexec(Reprog *prog, Rune *str, Resub *sem, int msize)
 	rsp = str;
 	rep = nil;
 	endr = L'\0';
-	if(sem != nil && msize){
-		if(sem->rsp != nil) {
+	if(sem != nil && msize > 0) {
+		if(sem->rsp != nil)
 			rsp = sem->rsp;
-		}
 		if(sem->rep != nil && *sem->rep != L'\0') {
 			rep = sem->rep;
 			endr = *sem->rep;
@@ -83,12 +82,12 @@ Again:
 			goto Again;
 		case OCLASS:
 		Class:
-			if(*rsp < curinst->r)
-				goto Done;
 			if(*rsp > curinst->r1) {
 				curinst++;
 				goto Class;
 			}
+			if(*rsp < curinst->r)
+				goto Done;
 			nextthr = t->next;
 			t->pc = curinst->a;
 			t->next = nil;
@@ -124,16 +123,17 @@ Again:
 			goto Again;
 		case OSPLIT:
 			nextthr = *--availthr;
-			nextthr->next = t->next;
 			nextthr->pc = curinst->b;
-			if(msize)
+			if(msize > 0)
 				memcpy(nextthr->sem, t->sem, sizeof(Resub)*msize);
 			nextthr->pri = t->pri;
+			nextthr->next = t->next;
 			t->next = nextthr;
 			curinst = curinst->a;
 			goto Again;
 		case OSAVE:
-			t->sem[curinst->sub].rsp = rsp;
+			if(curinst->sub < msize)
+				t->sem[curinst->sub].rsp = rsp;
 			curinst++;
 			goto Again;
 		case OUNSAVE:
@@ -143,13 +143,14 @@ Again:
 					goto Done;
 				match = 1;
 				matchpri = t->pri;
-				if(msize) {
+				if(sem != nil && msize > 0) {
 					memcpy(sem, t->sem, sizeof(Resub)*msize);
 					sem->rep = rsp;
 				}
 				goto Done;
 			}
-			t->sem[curinst->sub].rep = rsp;
+			if(curinst->sub < msize)
+				t->sem[curinst->sub].rep = rsp;
 			curinst++;
 			goto Again;
 		Done:
@@ -165,11 +166,11 @@ Start:
 		if(first == 1 && match == 0) {
 			first = 0;
 			t = *--availthr;
-			t->next = nil;
+			if(msize > 0)
+				memset(t->sem, 0, sizeof(Resub)*msize);
 			/* "Lower" priority thread */
 			t->pri = matchpri = pri++;
-			if(msize)
-				memset(t->sem, 0, sizeof(Resub)*msize);
+			t->next = nil;
 			curinst = prog->startinst;
 			goto Again;
 		}

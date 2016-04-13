@@ -43,7 +43,7 @@ regexec(Reprog *prog, char *str, Resub *sem, int msize)
 	sp = str;
 	ep = nil;
 	endc = '\0';
-	if(sem != nil && msize){
+	if(sem != nil && msize > 0) {
 		if(sem->sp != nil)
 			str = sem->sp;
 		if(sem->ep != nil && *sem->ep != '\0') {
@@ -83,12 +83,12 @@ Again:
 			goto Again;
 		case OCLASS:
 		Class:
-			if(r < curinst->r)
-				goto Done;
 			if(r > curinst->r1) {
 				curinst++;
 				goto Class;
 			}
+			if(r < curinst->r)
+				goto Done;
 			nextthr = t->next;
 			t->pc = curinst->a;
 			t->next = nil;
@@ -124,16 +124,17 @@ Again:
 			goto Again;
 		case OSPLIT:
 			nextthr = *--availthr;
-			nextthr->next = t->next;
 			nextthr->pc = curinst->b;
-			if(msize)
+			if(msize > 0)
 				memcpy(nextthr->sem, t->sem, sizeof(Resub)*msize);
 			nextthr->pri = t->pri;
+			nextthr->next = t->next;
 			t->next = nextthr;
 			curinst = curinst->a;
 			goto Again;
 		case OSAVE:
-			t->sem[curinst->sub].sp = sp;
+			if(curinst->sub < msize)
+				t->sem[curinst->sub].sp = sp;
 			curinst++;
 			goto Again;
 		case OUNSAVE:
@@ -143,13 +144,14 @@ Again:
 					goto Done;
 				match = 1;
 				matchpri = t->pri;
-				if(msize) {
+				if(sem != nil && msize > 0) {
 					memcpy(sem, t->sem, sizeof(Resub)*msize);
 					sem->ep = sp;
 				}
 				goto Done;
 			}
-			t->sem[curinst->sub].ep = sp;
+			if(curinst->sub < msize)
+				t->sem[curinst->sub].ep = sp;
 			curinst++;
 			goto Again;
 		Done:
@@ -165,7 +167,7 @@ Start:
 		if(first == 1 && match == 0) {
 			first = 0;
 			t = *--availthr;
-			if(msize)
+			if(msize > 0)
 				memset(t->sem, 0, sizeof(Resub)*msize);
 			/* "Lower" priority thread */
 			t->pri = matchpri = pri++;

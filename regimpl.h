@@ -37,8 +37,8 @@ struct Parselex
 	Renode *nodes;
 	int sub;
 	int instrs;
-	void (*getnextr)(Parselex*);
 	/* Lex */
+	void (*getnextr)(Parselex*);
 	char *rawexp;
 	char *orig;
 	Rune rune;

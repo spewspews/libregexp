@@ -287,6 +287,7 @@ compile(Renode *parsetr, Reprog *reprog, int nl)
 	Reinst *reinst;
 	int sub;
 
+	sub = 0;
 	reinst = (Reinst*)(reprog+1);
 	compile1(parsetr, reinst, &sub, nl);
 	return reinst;
