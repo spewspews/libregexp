@@ -56,17 +56,18 @@ e3(Parselex *plex)
 		n = e0(plex);
 		n = node(plex, TSUB, n, nil);
 		if(lex(plex) != LRPAR) {
-			regerror("No matching parenthesis");
-			break;
+			snprint(error, sizeof(error), "regexp %s: no matching parenthesis", plex->orig);
+			regerror(error);
+			longjmp(plex->exitenv, 1);
 		}
 		return n;
 	default:
 		if(plex->rune)
-			snprint(error, sizeof(error), "%s: syntax error: %C", plex->orig, plex->rune);
+			snprint(error, sizeof(error), "regexp %s: syntax error: %C", plex->orig, plex->rune);
 		else
-			snprint(error, sizeof(error), "%s: Parsing error", plex->orig);
+			snprint(error, sizeof(error), "regexp %s: parsing error", plex->orig);
 		regerror(error);
-		break;
+		longjmp(plex->exitenv, 1);
 	}
 	return nil;
 }
@@ -77,14 +78,17 @@ e2(Parselex *plex)
 	Renode *n;
 
 	n = e3(plex);
-	if(lex(plex) == LREP) {
+	while(lex(plex) == LREP) {
 		switch(plex->rune) {
 		case L'*':
-			return node(plex, TSTAR, n, nil);
+			n = node(plex, TSTAR, n, nil);
+			break;
 		case L'+':
-			return node(plex, TPLUS, n, nil);
+			n = node(plex, TPLUS, n, nil);
+			break;
 		case L'?':
-			return node(plex, TQUES, n, nil);
+			n = node(plex, TQUES, n, nil);
+			break;
 		}
 	}
 	plex->peek = 1;
@@ -152,13 +156,24 @@ initplex(Parselex *plex, char *regstr, int lit)
 	return plex;
 }
 
+static int
+maxthreads(Renode *tree)
+{
+	tree = tree->left;
+	if(tree->op == TCAT)
+		tree = tree->left;
+	if(tree->op == TBOL)
+		return 2;
+	return -1;
+}
+
 static Reprog*
 regcomp1(char *regstr, int nl, int lit)
 {
 	Reprog *reprog;
 	Parselex plex;
 	Renode *parsetr;
-	int regstrlen;
+	int regstrlen, maxthr;
 
 	regstrlen = utflen(regstr);
 	initplex(&plex, regstr, lit);
@@ -166,18 +181,23 @@ regcomp1(char *regstr, int nl, int lit)
 	if(plex.nodes == nil)
 		return nil;
 	plex.next = plex.nodes;
+
+	if(setjmp(plex.exitenv) != 0) {
+		free(plex.nodes);
+		return nil;
+	}
+
+	maxthr = regstrlen;
 	parsetr = node(&plex, TSUB, e0(&plex), nil);
 
-//	prtree(parsetr);
+//	prtree(parsetr, 0, 1);
 	reprog = malloc(sizeof(Reprog) +
 	                sizeof(Reinst) * plex.instrs +
-	                sizeof(Rethread) * regstrlen +
-	                sizeof(Rethread*) * regstrlen);
+	                sizeof(Rethread) * maxthr);
 	reprog->len = plex.instrs;
-	reprog->nthr = regstrlen;
+	reprog->nthr = maxthr;
 	reprog->startinst = compile(parsetr, reprog, nl);
 	reprog->threads = (Rethread*)(reprog->startinst + reprog->len);
-	reprog->thrpool = (Rethread**)(reprog->threads + reprog->nthr);
 	reprog->regstr = regstr;
 
 	free(plex.nodes);
@@ -383,50 +403,57 @@ getclass(Parselex *l)
 	Rune *p, *q, t;
 
 	l->nc = 0;
-	l->getnextr(l);
+	getnextrlit(l);
 	if(l->rune == L'^') {
 		l->nc = 1;
-		l->getnextr(l);
+		getnextrlit(l);
 	}
 	p = l->cpairs;
-	p[0] = l->rune;
 	for(;;) {
-		if(l->rune == '\\') {
-			l->getnextr(l);
-			p[0] = l->rune;
-		}
+		*p = l->rune;
 		if(l->rune == L']')
 			break;
+		if(l->rune == L'-') {
+			regerror("Malformed class");
+			longjmp(l->exitenv, 1);
+		}
+		if(l->rune == '\\') {
+			getnextrlit(l);
+			*p = l->rune;
+		}
 		if(l->rune == 0) {
 			regerror("No closing ] for class");
-			return;
+			longjmp(l->exitenv, 1);
 		}
-		p[1] = l->rune;
-		p += 2;
+		getnextrlit(l);
+		if(l->rune == L'-') {
+			getnextrlit(l);
+			if(l->rune == L']') {
+				regerror("Malformed class");
+				longjmp(l->exitenv, 1);
+			}
+			if(l->rune == L'-') {
+				regerror("Malformed class");
+				longjmp(l->exitenv, 1);
+			}
+			if(l->rune == L'\\')
+				getnextrlit(l);
+			p[1] = l->rune;
+			if(p[0] > p[1]) {
+				t = p[0];
+				p[0] = p[1];
+				p[1] = t;
+			}
+			getnextrlit(l);
+		} else
+			p[1] = p[0];
 		if(p >= l->cpairs + nelem(l->cpairs) - 2) {
-			regerror("Class too big");
-			return;
+			regerror("Class too big\n");
+			longjmp(l->exitenv, 1);
 		}
-		l->getnextr(l);
-		if(l->rune != L'-') {
-			p[0] = l->rune;
-			continue;
-		}
-		l->getnextr(l);
-		if(l->rune == '\\')
-			l->getnextr(l);
-		if(l->rune == L']')
-			break;
-		p[-1] = l->rune;
-		if(p[-2] > p[-1]) {
-			t = p[-2];
-			p[-2] = p[-1];
-			p[-1] = t;
-		}
-		l->getnextr(l);
-		p[0] = l->rune;
+		p += 2;
 	}
-	*p = 0;
+	*p = L'\0';
 	qsort(l->cpairs, (p - l->cpairs)/2, 2*sizeof(*l->cpairs), pcmp);
 	q = l->cpairs;
 	for(p = l->cpairs+2; *p != 0; p += 2) {
@@ -437,6 +464,8 @@ getclass(Parselex *l)
 			continue;
 		}
 		q[0] = p[0];
+		if(p[1] > q[1])
+			q[1] = p[1];
 	}
 	q[2] = 0;
 }
@@ -533,14 +562,14 @@ prtree(Renode *tree, int d, int f)
 		print("$\n");
 		break;
 	case TSUB:
-		print("SUB\n");
+		print("TSUB\n");
 		prtree(tree->left, d+1, 1);
 		break;
 	case TRUNE:
-		print("RUNE: %C\n", tree->r);
+		print("TRUNE: %C\n", tree->r);
 		break;
 	case TNOTNL:
-		print("NOTNL: \\n\n");
+		print("TNOTNL: !\\n\n");
 		break;
 	case TCLASS:
 		print("CLASS: %C-%C\n", tree->r, tree->r1);

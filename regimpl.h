@@ -37,6 +37,7 @@ struct Parselex
 	Renode *nodes;
 	int sub;
 	int instrs;
+	jmp_buf exitenv;
 	/* Lex */
 	void (*getnextr)(Parselex*);
 	char *rawexp;
@@ -46,7 +47,7 @@ struct Parselex
 	int peeklex;
 	int done;
 	int literal;
-	Rune cpairs[200+2];
+	Rune cpairs[400+2];
 	int nc;
 };
 struct Renode

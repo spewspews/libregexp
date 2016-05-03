@@ -37,20 +37,19 @@ struct Resub
 };
 struct Reprog
 {
-	Reinst *startinst; /* start pc */
+	Reinst *startinst;
 	Rethread *threads;
-	Rethread **thrpool;
 	char *regstr;
 	int len;
 	int nthr;
 };
 
-Reprog *regcomp(char*);
-Reprog *regcomplit(char*);
-Reprog *regcompnl(char*);
-void regerror(char*);
-int regexec(Reprog*, char*, Resub*, int);
-void regsub(char*, char*, int, Resub*, int);
-int rregexec(Reprog*, Rune*, Resub*, int);
-void rregsub(Rune*, Rune*, int, Resub*, int);
-int reprogfmt(Fmt *);
+Reprog*	regcomp(char*);
+Reprog*	regcomplit(char*);
+Reprog*	regcompnl(char*);
+void	regerror(char*);
+int	regexec(Reprog*, char*, Resub*, int);
+void	regsub(char*, char*, int, Resub*, int);
+int	rregexec(Reprog*, Rune*, Resub*, int);
+void	rregsub(Rune*, Rune*, int, Resub*, int);
+int	reprogfmt(Fmt *);
